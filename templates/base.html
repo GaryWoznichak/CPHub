@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header>
+        <div class="header-container">
+            <div class="logo-container">
+            <a href="{{ url_for('home') }}">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="PacketViper Logo" class="logo">
+            </a>
+            </div>
+            <div class="header-content">
+                <h1>CyberPhysical Security Hub</h1>
+                <nav>
+                    <ul>
+                        <li><a href="{{ url_for('home') }}">Home</a></li>
+                        <li><a href="{{ url_for('list_devices') }}">Devices</a></li>
+                        <li><a href="{{ url_for('recordings') }}">Recordings</a></li>
+                        <li><a href="{{ url_for('interactive_map') }}">Map</a></li>
+                        <li><a href="{{ url_for('list_events') }}">Events</a></li>
+                        <li><a href="{{ url_for('settings') }}">Settings</a></li>
+                </nav>
+            </div>
+        </div>
+    </header>
+   
+    <main>
+        {% if get_flashed_messages() %}
+        <div class="flash-messages">
+            {% for category, message in get_flashed_messages(with_categories=true) %}
+            <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+       
+        {% block content %}{% endblock %}
+    </main>
+   
+    <footer>
+        <p>&copy; 2025 CyberPhysical Security Hub</p>
+        <p class="version-info">Version: <span id="version-number">Loading...</span></p>
+    </footer>
+
+    <script>
+        // Load version info
+        fetch('/api/version')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('version-number').textContent = data.version;
+                }
+            })
+            .catch(error => {
+                console.log('Version check failed:', error);
+                document.getElementById('version-number').textContent = 'Unknown';
+            });
+    </script>
+</body>
+</html>

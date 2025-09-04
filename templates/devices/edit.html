@@ -1,0 +1,534 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <!-- Header Section -->
+    <div class="container mt-4">
+        <h1>Edit Device</h1>
+        <div class="device-subtitle">{{ device.device_name }} • ID: #{{ device.device_id }}</div>
+        <hr style="border-color: #34495e; margin: 20px 0;">
+    
+        <!-- Back Button -->
+        <div class="mb-4">
+            <a href="{{ url_for('view_device', device_id=device.device_id) }}" class="action-button">
+                <i class="fas fa-arrow-left"></i>
+                Back to Device View
+            </a>
+        </div>
+
+    <!-- Edit Form -->
+    <div class="edit-form-container">
+        <form method="POST" action="{{ url_for('update_device', device_id=device.device_id) }}">
+            <div class="form-grid">
+                <!-- Basic Information -->
+                <div class="form-section">
+                    <h3><i class="fas fa-info-circle"></i> Basic Information</h3>
+                    
+                    <div class="form-group">
+                        <label for="device_name">Device Name *</label>
+                        <input type="text" id="device_name" name="device_name" 
+                               value="{{ device.device_name }}" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="device_type">Device Type</label>
+                        <select id="device_type" name="device_type">
+                            <option value="CyberPhysical Unit" {{ 'selected' if device.device_type == 'CyberPhysical Unit' else '' }}>CyberPhysical Unit</option>
+                            <option value="Security Camera" {{ 'selected' if device.device_type == 'Security Camera' else '' }}>Security Camera</option>
+                            <option value="Access Control" {{ 'selected' if device.device_type == 'Access Control' else '' }}>Access Control</option>
+                            <option value="Sensor Array" {{ 'selected' if device.device_type == 'Sensor Array' else '' }}>Sensor Array</option>
+                            <option value="Other" {{ 'selected' if device.device_type == 'Other' else '' }}>Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="model_number">Model</label>
+                        <input type="text" id="model_number" name="model_number" 
+                            value="{{ device.model_number or '' }}">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="serial_number">Serial Number</label>
+                        <input type="text" id="serial_number" name="serial_number" 
+                               value="{{ device.serial_number or '' }}">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="description">Description</label>
+                        <textarea id="description" name="description" rows="3">{{ device.description or '' }}</textarea>
+                    </div>
+                </div>
+                
+                <!-- Connection Settings -->
+                <div class="form-section">
+                    <h3><i class="fas fa-network-wired"></i> Connection Settings</h3>
+                    
+                    <div class="form-group">
+                        <label for="ip_address">IP Address *</label>
+                        <input type="text" id="ip_address" name="ip_address" 
+                               value="{{ device.ip_address or '' }}" required
+                               pattern="^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="port">Port</label>
+                        <input type="number" id="port" name="port" 
+                               value="{{ device.port or 5675 }}" min="1" max="65535">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="location">Location</label>
+                        <input type="text" id="location" name="location" 
+                               value="{{ device.locations.first().building_name if device.locations.first() else '' }}">
+                    </div>
+                    
+                    <div class="form-group checkbox-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="is_active" {{ 'checked' if device.is_active else '' }}>
+                            <span class="checkmark"></span>
+                            Device is Active
+                        </label>
+                    </div>
+                </div>
+
+                <!-- GPS Location -->
+                <div class="form-section" style="grid-column: 1 / -1;">
+                    <h3><i class="fas fa-map-marker-alt"></i> GPS Location</h3>
+                    
+                    <div class="gps-form-grid">
+                        <div class="form-group">
+                            <label for="location_type">Location Type</label>
+                            <select id="location_type" name="location_type">
+                                <option value="">Select Type</option>
+                                <option value="traffic_box" {% if device.locations.first() and device.locations.first().location_type == 'traffic_box' %}selected{% endif %}>Traffic Control Box</option>
+                                <option value="pump_station" {% if device.locations.first() and device.locations.first().location_type == 'pump_station' %}selected{% endif %}>Pump Station</option>
+                                <option value="utility_pole" {% if device.locations.first() and device.locations.first().location_type == 'utility_pole' %}selected{% endif %}>Utility Pole</option>
+                                <option value="intersection" {% if device.locations.first() and device.locations.first().location_type == 'intersection' %}selected{% endif %}>Street Intersection</option>
+                                <option value="building" {% if device.locations.first() and device.locations.first().location_type == 'building' %}selected{% endif %}>Building</option>
+                                <option value="other" {% if device.locations.first() and device.locations.first().location_type == 'other' %}selected{% endif %}>Other</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Address Search -->
+                        <div class="form-group">
+                            <label for="address_search">Search Address (Optional)</label>
+                            <div class="address-search-container">
+                                <input type="text" id="address_search" name="address_search" 
+                                        value="{{ device.locations.first().address if device.locations.first() else '' }}"
+                                        placeholder="e.g., Main St & 5th Ave, Pittsburgh PA">
+                                <button type="button" id="searchButton" class="btn-search">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </div>
+                            <small class="form-text">Enter address and click search, or click on map below</small>
+                        </div>
+                    </div>
+                    
+                    <!-- Map Container -->
+                    <div class="map-container">
+                        <div id="location-picker-map"></div>
+                        <div class="coordinate-display">
+                            <span id="coordinates-text">Click on map to set GPS location</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Hidden GPS fields -->
+                    <input type="hidden" id="latitude" name="latitude">
+                    <input type="hidden" id="longitude" name="longitude">
+                </div>
+            </div>
+            
+            <!-- Form Actions -->
+            <div class="form-actions">
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+                <a href="{{ url_for('view_device', device_id=device.device_id) }}" class="btn btn-secondary">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+/* Edit form styles */
+.device-detail-header {
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #34495e;
+}
+
+.device-detail-header h1 {
+    color: #ecf0f1;
+    font-size: 2.2em;
+    font-weight: 600;
+    margin: 0 0 5px 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.device-subtitle {
+    color: #bdc3c7;
+    font-size: 1.1em;
+    margin: 0;
+}
+
+.header-left {
+    margin: 0;
+    padding: 0;
+}
+
+.action-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: #3498db;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    border: 1px solid #2980b9;
+    transition: all 0.3s;
+    font-size: 0.85em;
+    font-weight: 500;
+    margin-bottom: 20px;
+}
+
+.action-button:hover {
+    background: #2980b9;
+    border-color: #21618c;
+    transform: translateY(-1px);
+    color: white;
+    text-decoration: none;
+}
+
+.edit-form-container {
+    background: #34495e;
+    border-radius: 8px;
+    border: 1px solid #2c3e50;
+    padding: 30px;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    margin-bottom: 30px;
+}
+
+.form-section h3 {
+    color: #ecf0f1;
+    font-size: 1.3em;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #2c3e50;
+    padding-bottom: 10px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    color: #bdc3c7;
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #2c3e50;
+    border-radius: 4px;
+    background: #2c3e50;
+    color: #ecf0f1;
+    font-size: 0.9em;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.checkbox-group {
+    display: flex;
+    align-items: center;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: #ecf0f1;
+}
+
+/* Form Actions - Make buttons same size and perfectly aligned */
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding-top: 20px;
+    border-top: 1px solid #2c3e50;
+    align-items: center;
+}
+
+.btn {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 6px;
+    text-decoration: none;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 0.9em;
+    width: 160px; /* Wider fixed width */
+    height: 44px; /* Fixed height */
+    text-align: center;
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+
+.btn-success {
+    background: #27ae60;
+    color: white;
+    border: 1px solid #229954; /* Add subtle border */
+}
+
+.btn-success:hover {
+    background: #229954;
+    border-color: #1e8449;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3); /* Add hover shadow */
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+    border: 1px solid #5a6268; /* Add subtle border */
+}
+
+.btn-secondary:hover {
+    background: #5a6268;
+    border-color: #495057;
+    transform: translateY(-1px);
+    text-decoration: none;
+    color: white;
+    box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3); /* Add hover shadow */
+}
+
+.btn i {
+    font-size: 0.9em; /* Consistent icon size */
+}
+
+/* GPS Location styles */
+.gps-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.address-search-container {
+    display: flex;
+    gap: 10px;
+}
+
+.address-search-container input {
+    flex: 1;
+}
+
+.btn-search {
+    padding: 10px 15px;
+    background: #17a2b8;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.btn-search:hover {
+    background: #138496;
+}
+
+.map-container {
+    margin-top: 15px;
+}
+
+#location-picker-map {
+    height: 300px;
+    width: 100%;
+    border: 2px solid #2c3e50;
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+
+.coordinate-display {
+    background: #2c3e50;
+    border: 1px solid #34495e;
+    border-radius: 4px;
+    padding: 8px 12px;
+    color: #bdc3c7;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85em;
+    text-align: center;
+}
+
+.form-text {
+    color: #95a5a6;
+    font-size: 0.8em;
+    margin-top: 5px;
+}
+
+@media (max-width: 768px) {
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .gps-form-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+    }
+}
+</style>
+
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+// Initialize map
+const map = L.map('location-picker-map').setView([40.4406, -79.9959], 12);
+
+// Add tile layer
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+}).addTo(map);
+
+// Current marker
+let currentMarker = null;
+
+// Function to update coordinates
+function updateCoordinates(lat, lng) {
+    document.getElementById('latitude').value = lat;
+    document.getElementById('longitude').value = lng;
+    document.getElementById('coordinates-text').textContent = `GPS Location: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+}
+
+// Handle map clicks
+map.on('click', function(e) {
+    const lat = e.latlng.lat;
+    const lng = e.latlng.lng;
+    
+    // Remove existing marker
+    if (currentMarker) {
+        map.removeLayer(currentMarker);
+    }
+    
+    // Add new marker
+    currentMarker = L.marker([lat, lng]).addTo(map);
+    
+    // Update coordinates
+    updateCoordinates(lat, lng);
+});
+
+// Address search
+document.getElementById('searchButton').addEventListener('click', function() {
+    const address = document.getElementById('address_search').value.trim();
+    
+    if (!address) {
+        alert('Please enter an address to search');
+        return;
+    }
+    
+    // Show loading
+    this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    this.disabled = true;
+    
+    // Search using Nominatim
+    const geocodeUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
+    
+    fetch(geocodeUrl)
+        .then(response => response.json())
+        .then(data => {
+            if (data && data.length > 0) {
+                const result = data[0];
+                const lat = parseFloat(result.lat);
+                const lng = parseFloat(result.lon);
+                
+                // Remove existing marker
+                if (currentMarker) {
+                    map.removeLayer(currentMarker);
+                }
+                
+                // Add new marker
+                currentMarker = L.marker([lat, lng]).addTo(map);
+                map.setView([lat, lng], 16);
+                
+                // Update coordinates and location field
+                updateCoordinates(lat, lng);
+                document.getElementById('location').value = result.display_name;
+            } else {
+                alert('Address not found. Try clicking on the map instead.');
+            }
+        })
+        .catch(error => {
+            console.error('Geocoding error:', error);
+            alert('Error searching address. Try clicking on the map instead.');
+        })
+        .finally(() => {
+            // Restore button
+            this.innerHTML = '<i class="fas fa-search"></i>';
+            this.disabled = false;
+        });
+});
+
+// Load existing GPS coordinates - FIXED VERSION
+document.addEventListener('DOMContentLoaded', function() {
+    // Get existing coordinates from hidden fields if they exist
+    const latField = document.getElementById('latitude');
+    const lngField = document.getElementById('longitude');
+    
+    // Check if we have existing values in the form fields
+    {% if device.locations.first() and device.locations.first().latitude and device.locations.first().longitude %}
+        const existingLat = {{ device.locations.first().latitude }};
+        const existingLng = {{ device.locations.first().longitude }};
+        
+        // Set the hidden form fields
+        latField.value = existingLat;
+        lngField.value = existingLng;
+        
+        // Add marker and center map
+        currentMarker = L.marker([existingLat, existingLng]).addTo(map);
+        map.setView([existingLat, existingLng], 15);
+        
+        // Update coordinate display
+        updateCoordinates(existingLat, existingLng);
+        
+        console.log('Loaded existing GPS:', existingLat, existingLng);
+    {% endif %}
+});
+
+console.log('GPS location picker initialized');
+</script>
+
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Event: {{ event.event_type }}</h2>
+
+<div class="event-details">
+    <table>
+        <tr>
+            <th>Event ID:</th>
+            <td>{{ event.event_id }}</td>
+        </tr>
+        <tr>
+            <th>Type:</th>
+            <td>{{ event.event_type }}</td>
+        </tr>
+        <tr>
+            <th>Device:</th>
+            <td>{{ event.device.device_name if event.device else 'N/A' }}</td>
+        </tr>
+        <tr>
+            <th>Timestamp:</th>
+            <td>{{ event.event_timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        </tr>
+        <tr>
+            <th>Severity:</th>
+            <td>{{ event.severity_level }}</td>
+        </tr>
+        <tr>
+            <th>Status:</th>
+            <td>{{ event.is_resolved and 'Resolved' or 'Unresolved' }}</td>
+        </tr>
+        <tr>
+            <th>Description:</th>
+            <td>{{ event.event_description }}</td>
+        </tr>
+        {% if event.is_resolved %}
+        <tr>
+            <th>Resolution Notes:</th>
+            <td>{{ event.resolution_notes }}</td>
+        </tr>
+        {% endif %}
+    </table>
+</div>
+
+<div class="action-buttons">
+    {% if not event.is_resolved %}
+    <a href="#" class="button">Mark as Resolved</a>
+    {% endif %}
+    <a href="{{ url_for('list_events') }}" class="button">Back to Events</a>
+</div>
+{% endblock %}

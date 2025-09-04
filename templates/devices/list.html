@@ -1,0 +1,367 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <h2>Security Devices</h2>
+
+            <!-- Summary Stats -->
+            <div class="row mt-4">
+                <div class="col-md-12">
+                    <div class="device-summary">
+                        <div class="summary-item">
+                            <span class="summary-number">{{ devices|length }}</span>
+                            <span class="summary-label">Total Devices</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-number connected">{{ devices|selectattr('approval_status', 'equalto', 'approved')|list|length }}</span>
+                            <span class="summary-label">Connected</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-number pending">{{ devices|selectattr('approval_status', 'equalto', 'pending')|list|length }}</span>
+                            <span class="summary-label">Pending</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-number offline">{{ devices|selectattr('approval_status', 'equalto', 'rejected')|list|length }}</span>
+                            <span class="summary-label">Offline</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            {% if devices %}
+                <div class="table-responsive">
+                    <table class="table table-dark table-striped">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Model</th>
+                                <th>Location</th>
+                                <th>IP Address</th>
+                                <th>Connection Status</th>
+                                <th>Serial Number</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for device in devices %}
+                            <tr class="device-row" onclick="window.location.href='{{ url_for('view_device', device_id=device.device_id) }}'">
+                                <td><strong>{{ device.device_name }}</strong></td>
+                                <td>{{ device.device_type }}</td>
+                                <td>
+                                    <span class="model-badge">
+                                        {% if device.model_number == 'Industrial OTR' %}
+                                            IND-OTR
+                                        {% elif device.model_number == 'PV 100 Series' %}
+                                            PV-100
+                                        {% elif device.model_number == 'PV 200 Series' %}
+                                            PV-200
+                                        {% elif device.model_number == 'PV 300 Series' %}
+                                            PV-300
+                                        {% else %}
+                                            {{ device.model_number }}
+                                        {% endif %}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if device.locations %}
+                                        {% for location in device.locations %}
+                                            <i class="fas fa-map-marker-alt"></i> {{ location.building_name }}
+                                            {% if not loop.last %}<br>{% endif %}
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-muted">No location set</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if device.tunnel_port and device.tunnel_status == 'connected' %}
+                                        <code>Tunnel:{{ device.tunnel_port }}</code>
+                                    {% elif device.ip_address %}
+                                        <code>{{ device.ip_address }}:{{ device.port or 5675 }}</code>
+                                    {% else %}
+                                        <span class="text-muted">Not configured</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if device.connection_status == 'connected' or device.tunnel_status == 'connected' %}
+                                        {% set actual_status = 'connected' %}
+                                    {% elif device.connection_status in ['pending', 'tunnel_pending'] %}
+                                        {% set actual_status = 'pending' %}
+                                    {% else %}
+                                        {% set actual_status = 'disconnected' %}
+                                    {% endif %}
+                                    <span class="status-badge status-{{ actual_status }}">
+                                        {% if actual_status == 'connected' %}
+                                            <i class="fas fa-check-circle"></i> Connected
+                                        {% elif actual_status == 'pending' %}
+                                            <i class="fas fa-clock"></i> Pending
+                                        {% else %}
+                                            <i class="fas fa-times-circle"></i> Disconnected
+                                        {% endif %}
+                                    </span>
+                                </td>
+                                <td>{{ device.serial_number or 'N/A' }}</td>
+                                <td>
+                                    <div class="action-buttons">
+                                        <a href="{{ url_for('edit_device', device_id=device.device_id) }}" 
+                                           class="action-btn edit-btn" 
+                                           onclick="event.stopPropagation();">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </a>
+                                        <button class="action-btn delete-btn" 
+                                                onclick="event.stopPropagation(); deleteDevice({{ device.device_id }}, '{{ device.device_name }}');">
+                                            <i class="fas fa-trash"></i> Delete
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+            {% else %}
+                <div class="no-devices">
+                    <i class="fas fa-exclamation-triangle fa-3x text-muted mb-3"></i>
+                    <h4>No devices found</h4>
+                    <p class="text-muted">Get started by adding your first CyberPhysical device.</p>
+                </div>
+            {% endif %}
+            
+            <div class="mb-3 mt-4">
+                <a href="{{ url_for('add_device') }}" class="button">
+                    <i class="fas fa-plus"></i> Add New Device
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.table-dark {
+    background-color: #2c3e50;
+    color: #ecf0f1;
+}
+
+.table-dark th {
+    background-color: #34495e;
+    border-color: #455A64;
+    color: #ecf0f1;
+    font-weight: 600;
+}
+
+.table-dark td {
+    border-color: #455A64;
+    vertical-align: middle;
+}
+
+/* Table alignment fixes */
+.table th, .table td {
+    vertical-align: middle;
+    padding: 12px 15px;
+}
+
+/* Only center the small badge/status columns */
+.table th:nth-child(3), .table td:nth-child(3) { text-align: center; } /* Model badge */
+.table th:nth-child(6), .table td:nth-child(6) { text-align: center; } /* Connection Status */
+.table th:nth-child(8), .table td:nth-child(8) { text-align: center; vertical-align: middle; } /* Actions */
+
+/* Make sure the table takes full width */
+.table {
+    width: 100%;
+    table-layout: 100%;  /* This helps with column alignment */
+}
+
+/* Clickable row styles */
+.device-row {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.device-row:hover {
+    background-color: rgba(52, 152, 219, 0.1) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Edit button styles */
+.edit-btn-centered {
+    display: block;
+    width: 60px; /* Fixed width */
+    margin: 0 auto; /* Center the button in the cell */
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: .9em;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    text-align: center; /* Center text inside button */
+}
+
+.edit-btn-centered:hover {
+    background-color: #2980b9;
+    color: white;
+    text-decoration: none;
+    transform: translateY(-1px);
+}
+
+.edit-btn-centered i {
+    margin-right: 4px;
+}
+
+.model-badge {
+    background-color: #3498db;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: 500;
+    white-space: nowrap;  /* Prevent wrapping */
+    display: inline-block;
+}
+
+.status-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    font-weight: 500;
+}
+
+.status-connected {
+    background-color: #27ae60;
+    color: white;
+}
+
+.status-pending {
+    background-color: #f39c12;
+    color: white;
+}
+
+.status-disconnected, .status-unknown {
+    background-color: #e74c3c;
+    color: white;
+}
+
+.device-summary {
+    display: flex;
+    justify-content: space-around;
+    background-color: #34495e;
+    padding: 20px;
+    border-radius: 8px;
+    margin-top: 20px;
+}
+
+.summary-item {
+    text-align: center;
+}
+
+.summary-number {
+    display: block;
+    font-size: 2em;
+    font-weight: bold;
+    color: #ecf0f1;
+}
+
+.summary-number.connected { color: #27ae60; }
+.summary-number.pending { color: #f39c12; }
+.summary-number.offline { color: #e74c3c; }
+
+.summary-label {
+    display: block;
+    font-size: 0.9em;
+    color: #bdc3c7;
+    margin-top: 4px;
+}
+
+.no-devices {
+    text-align: center;
+    padding: 60px 20px;
+    background-color: #34495e;
+    border-radius: 8px;
+}
+
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 0.85em;
+}
+
+.btn-primary {
+    background-color: #3498db;
+    border-color: #3498db;
+}
+
+code {
+    background-color: #2c3e50;
+    color: #e74c3c;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 5px;
+    justify-content: center;
+}
+
+.action-btn {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: .85em;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.edit-btn:hover {
+    background-color: #2980b9;
+}
+
+.delete-btn {
+    background-color: #e74c3c;
+}
+
+.delete-btn:hover {
+    background-color: #c0392b;
+}
+
+</style>
+
+<script>
+function deleteDevice(deviceId, deviceName) {
+    const confirmDelete = confirm(`⚠️ DELETE DEVICE?\n\nDevice: ${deviceName}\n\nWARNING: This will permanently remove the device and all its data.\n\nThis action cannot be undone.\n\nContinue?`);
+    
+    if (!confirmDelete) return;
+    
+    console.log(`Deleting device ${deviceId}: ${deviceName}`);
+    
+    fetch(`/api/devices/${deviceId}/delete`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`✅ Device deleted: ${deviceName}`);
+            window.location.reload();
+        } else {
+            alert(`❌ Error deleting device: ${data.error}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error deleting device:', error);
+        alert(`⚠️ Network error: ${error.message}`);
+    });
+}
+</script>
+
+{% endblock %}

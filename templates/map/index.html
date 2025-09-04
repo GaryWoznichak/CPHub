@@ -1,0 +1,538 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid">
+    <div class="map-header">
+        <h2><i class="fas fa-map-marked-alt"></i> Device Map</h2>
+        <div class="map-controls">
+            <div class="status-legend">
+                <span class="legend-item">
+                    <span class="status-dot connected"></span> Online
+                </span>
+                <span class="legend-item">
+                    <span class="status-dot pending"></span> Pending
+                </span>
+                <span class="legend-item">
+                    <span class="status-dot disconnected"></span> Offline
+                </span>
+            </div>
+        </div>
+    </div>
+   
+    <!-- Map Container -->
+    <div id="device-map" style="height: 70vh; width: 100%; border-radius: 8px;"></div>
+   
+    <!-- Device Info Panel -->
+    <div id="device-info-panel" class="device-panel">
+        <h4>Select a device on the map</h4>
+        <p>Click any marker to view device details and controls.</p>
+    </div>
+</div>
+
+<style>
+.map-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding: 15px 0;
+}
+.map-header h2 {
+    color: #ecf0f1;
+    margin: 0;
+}
+.status-legend {
+    display: flex;
+    gap: 20px;
+    color: #ecf0f1;
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.status-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.status-dot.connected { background-color: #27ae60; }
+.status-dot.pending { background-color: #f39c12; }
+.status-dot.disconnected { background-color: #e74c3c; }
+
+.device-panel {
+    background: #34495e;
+    border: 1px solid #2c3e50;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 20px;
+    color: #ecf0f1;
+}
+.device-panel h4 {
+    margin-top: 0;
+    color: #3498db;
+}
+#device-map {
+    border: 2px solid #2c3e50;
+}
+
+/* Enhanced Popup Styling to match dashboard theme */
+/* Enhanced popup styling - cleaner layout */
+.leaflet-popup-content-wrapper {
+    background: #34495e !important;
+    color: #ecf0f1 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3) !important;
+    border: 1px solid #2c3e50 !important;
+    padding: 0 !important; /* Remove default padding */
+}
+
+.leaflet-popup-content {
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #ecf0f1 !important;
+    font-family: inherit !important;
+    width: auto !important; /* Let content determine width */
+}
+
+.leaflet-popup-tip {
+    background: #34495e !important;
+    border: 1px solid #2c3e50 !important;
+}
+
+/* Close button positioning - move away from edge */
+.leaflet-popup-close-button {
+    color: #bdc3c7 !important;
+    font-size: 16px !important;
+    font-weight: bold !important;
+    padding: 8px 12px !important; /* More padding from edge */
+    right: 8px !important; /* Move further from edge */
+    top: 8px !important;
+    width: auto !important;
+    height: auto !important;
+    text-align: center !important;
+}
+
+.leaflet-popup-close-button:hover {
+    color: #ecf0f1 !important;
+    background: rgba(255,255,255,0.1) !important;
+    border-radius: 4px;
+}
+
+/* Device popup card styling - better spacing */
+.device-popup-card {
+    background: #34495e;
+    color: #ecf0f1;
+    padding: 18px; /* Increased padding */
+    min-width: 300px; /* Slightly wider */
+    border-radius: 8px;
+    margin: 0; /* Remove any default margins */
+}
+
+.device-popup-header {
+    margin-bottom: 15px; /* More space */
+    padding-bottom: 12px; /* More padding */
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.device-popup-name {
+    font-size: 1.1em;
+    font-weight: 600;
+    color: #ecf0f1;
+    margin-bottom: 6px; /* Better spacing */
+    line-height: 1.3;
+}
+
+.device-popup-type {
+    font-size: 0.9em;
+    color: #bdc3c7;
+    text-transform: uppercase;
+    font-weight: 500;
+    margin: 0; /* Remove default margins */
+}
+
+.device-popup-details {
+    margin-bottom: 18px; /* More space before buttons */
+}
+
+.device-popup-address {
+    font-size: 0.9em;
+    color: #ecf0f1;
+    margin-bottom: 10px; /* Better spacing */
+    line-height: 1.4; /* Better line height for address */
+    padding-left: 0; /* Remove any default padding */
+}
+
+.device-popup-model {
+    font-size: 0.85em;
+    color: #bdc3c7;
+    margin: 0; /* Remove default margins */
+    padding-left: 0; /* Remove any default padding */
+}
+
+.device-popup-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px; /* Slightly more gap */
+    margin-top: 18px;
+    padding-top: 15px; /* More padding */
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Make all buttons consistent */
+.popup-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px; /* Consistent gap */
+    padding: 10px 8px; /* More consistent padding */
+    background: #3498db; /* All buttons same blue initially */
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8em; /* Slightly larger text */
+    font-weight: 600;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    min-height: 36px; /* Consistent height */
+}
+
+.popup-action-btn:hover {
+    background: #2980b9;
+    transform: translateY(-1px);
+    color: white;
+}
+
+/* Specific button colors on hover only */
+.popup-action-btn.ping-btn:hover {
+    background: #2980b9;
+}
+
+.popup-action-btn.remote-btn:hover {
+    background: #2980b9;
+}
+
+.popup-action-btn.edit-btn:hover {
+    background: #2980b9; /* Purple on hover only */
+}
+
+.popup-action-btn:active {
+    transform: translateY(0);
+}
+
+/* Success/Error states */
+.popup-action-btn.success {
+    background: #27ae60 !important;
+}
+
+.popup-action-btn.error {
+    background: #e74c3c !important;
+}
+
+.popup-action-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* Close button styling */
+.leaflet-popup-close-button {
+    color: #bdc3c7 !important;
+    font-size: 18px !important;
+    font-weight: bold !important;
+    padding: 4px 8px !important;
+}
+
+.leaflet-popup-close-button:hover {
+    color: #ecf0f1 !important;
+    background: rgba(255,255,255,0.1) !important;
+    border-radius: 4px;
+}
+</style>
+
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// Device data from Flask
+const devices = {{ devices | tojson }};
+
+// Initialize map
+const map = L.map('device-map').setView([40.7128, -74.0060], 10); // Default to NYC, we'll adjust
+
+// Add tile layer (OpenStreetMap)
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+}).addTo(map);
+
+// Custom marker icons for different statuses
+const markerIcons = {
+    connected: L.divIcon({
+        className: 'custom-marker connected',
+        html: '<div class="marker-icon"><i class="fas fa-circle"></i></div>',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+    }),
+    pending: L.divIcon({
+        className: 'custom-marker pending',
+        html: '<div class="marker-icon"><i class="fas fa-circle"></i></div>',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+    }),
+    disconnected: L.divIcon({
+        className: 'custom-marker disconnected',
+        html: '<div class="marker-icon"><i class="fas fa-circle"></i></div>',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+    })
+};
+
+// Add marker styles
+const markerCSS = `
+<style>
+.custom-marker {
+    background: none;
+    border: none;
+}
+.marker-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 3px solid white;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+.connected .marker-icon {
+    background-color: #27ae60;
+    color: white;
+}
+.pending .marker-icon {
+    background-color: #f39c12;
+    color: white;
+}
+.disconnected .marker-icon {
+    background-color: #e74c3c;
+    color: white;
+}
+</style>
+`;
+document.head.insertAdjacentHTML('beforeend', markerCSS);
+
+// Function to get device type display name
+function getDeviceTypeDisplay(locationType) {
+    const typeMap = {
+        'traffic_box': 'Traffic Control Box',
+        'pump_station': 'Pump Station',
+        'building': 'Building', // This was missing!
+        'utility_pole': 'Utility Pole',
+        'intersection': 'Street Intersection',
+        'utility_station': 'Utility Station',
+        'other': 'Other Location'
+    };
+    return typeMap[locationType] || 'Unknown Type'; // Changed fallback
+}
+
+// Create enhanced popup content
+// Updated for your route structure
+function createDevicePopup(device) {
+    const address = device.address || device.location_name || 'Address not set';
+    const locationType = device.location_type || 'other';
+    
+    return `
+        <div class="device-popup-card">
+            <div class="device-popup-header">
+                <div class="device-popup-name">${device.device_name}</div>
+                <div class="device-popup-type">${getDeviceTypeDisplay(locationType)}</div>
+            </div>
+            
+            <div class="device-popup-details">
+                <div class="device-popup-address">
+                    <i class="fas fa-map-marker-alt" style="margin-right: 6px; color: #bdc3c7;"></i>
+                    ${address}
+                </div>
+                <div class="device-popup-model">
+                    <i class="fas fa-microchip" style="margin-right: 6px; color: #bdc3c7;"></i>
+                    ${device.model_number || 'Model not specified'}
+                </div>
+            </div>
+            
+            <div class="device-popup-actions">
+                <button class="popup-action-btn ping-btn" onclick="pingDeviceFromMap(${device.device_id}, '${device.ip_address}', this)">
+                    <i class="fas fa-satellite-dish"></i>
+                    <span>Ping</span>
+                </button>
+                
+                <button class="popup-action-btn remote-btn" onclick="remoteAccessFromMap(${device.device_id}, '${device.ip_address}', ${device.port}, this)">
+                    <i class="fas fa-external-link-alt"></i>
+                    <span>Remote</span>
+                </button>
+                
+                <button class="popup-action-btn edit-btn" onclick="editDeviceFromMap(${device.device_id})">
+                    <i class="fas fa-edit"></i>
+                    <span>Edit</span>
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+// Add this new function for the edit button
+function editDeviceFromMap(deviceId) {
+    window.location.href = `/devices/${deviceId}/edit`;
+}
+
+// Ping device function (same as dashboard)
+function pingDeviceFromMap(deviceId, deviceIp, button) {
+    const originalContent = button.innerHTML;
+    
+    // Update button to show pinging state
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Pinging...</span>';
+    button.disabled = true;
+    
+    console.log(`Pinging device ${deviceId} at ${deviceIp} from map`);
+    
+    // Ping the device
+    fetch(`/api/devices/${deviceId}/ping`)
+        .then(response => response.json())
+        .then(data => {
+            console.log('Ping response:', data);
+            
+            if (data.success) {
+                // Show success state
+                button.innerHTML = '<i class="fas fa-check"></i><span>Online</span>';
+                button.classList.add('success');
+                
+                // Show result in popup or alert
+                setTimeout(() => {
+                    alert(`🟢 Device is reachable!\n\nIP: ${data.ip_address}\nResponse Time: ${data.response_time}\nStatus: ${data.status}`);
+                }, 500);
+            } else {
+                // Show error state
+                button.innerHTML = '<i class="fas fa-times"></i><span>Failed</span>';
+                button.classList.add('error');
+                
+                setTimeout(() => {
+                    alert(`🔴 Ping failed!\n\nIP: ${data.ip_address}\nError: ${data.error}`);
+                }, 500);
+            }
+        })
+        .catch(error => {
+            console.error('Ping error:', error);
+            button.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>Error</span>';
+            button.classList.add('error');
+            setTimeout(() => {
+                alert(`⚠️ Network error: ${error.message}`);
+            }, 500);
+        })
+        .finally(() => {
+            // Restore button after 2 seconds
+            setTimeout(() => {
+                button.innerHTML = originalContent;
+                button.disabled = false;
+                button.classList.remove('success', 'error');
+            }, 2000);
+        });
+}
+
+// Remote access function (same as dashboard)
+function remoteAccessFromMap(deviceId, deviceIp, devicePort, button) {
+    // First, check if this device has a tunnel connection available
+    fetch(`/api/devices/${deviceId}/connection_info`)
+        .then(response => response.json())
+        .then(data => {
+            let deviceUrl;
+            let connectionType;
+            
+            if (data.tunnel_port && data.tunnel_status === 'connected') {
+                // Use tunnel connection
+                deviceUrl = `http://localhost:${data.tunnel_port}`;
+                connectionType = 'tunnel';
+                console.log(`🔗 Using tunnel connection to device ${deviceId} via port ${data.tunnel_port} from map`);
+            } else if (deviceIp && deviceIp !== 'N/A') {
+                // Use direct IP connection
+                deviceUrl = `http://${deviceIp}:${devicePort}`;
+                connectionType = 'direct';
+                console.log(`🔗 Using direct IP connection to device ${deviceId} at ${deviceIp} from map`);
+            } else {
+                alert('❌ No connection method available for this device');
+                return;
+            }
+            
+            console.log(`Opening remote access to device ${deviceId} at ${deviceUrl} (${connectionType}) from map`);
+            
+            // Open in new tab
+            const newTab = window.open(deviceUrl, '_blank');
+            
+            // Check if popup was blocked
+            if (!newTab || newTab.closed || typeof newTab.closed == 'undefined') {
+                alert(`🔒 Popup blocked!\n\nPlease allow popups for this site, or manually navigate to:\n${deviceUrl}`);
+                
+                const userChoice = confirm(`Would you like to open the device interface in this tab instead?\n\n${deviceUrl}`);
+                if (userChoice) {
+                    window.location.href = deviceUrl;
+                }
+            } else {
+                // Log the access attempt
+                fetch(`/api/devices/${deviceId}/log_access`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: 'remote_access_from_map',
+                        timestamp: new Date().toISOString(),
+                        url: deviceUrl,
+                        connection_type: connectionType
+                    })
+                }).catch(err => console.log('Access logging failed:', err));
+                
+                // Show brief success feedback
+                const originalContent = button.innerHTML;
+                button.innerHTML = `<i class="fas fa-check"></i><span>Opened (${connectionType})</span>`;
+                setTimeout(() => {
+                    button.innerHTML = originalContent;
+                }, 2000);
+            }
+        })
+        .catch(error => {
+            console.error('Error getting device connection info:', error);
+            alert('❌ Error determining connection method');
+        });
+}
+
+// Add devices to map
+const markers = [];
+devices.forEach(device => {
+    const status = device.approval_status === 'approved' ? 'connected' : 
+               (device.approval_status === 'pending' ? 'pending' : 'disconnected');
+    const icon = markerIcons[status] || markerIcons['disconnected'];
+   
+    const marker = L.marker([device.latitude, device.longitude], { icon: icon })
+        .addTo(map)
+        .bindPopup(createDevicePopup(device), {
+            maxWidth: 320,
+            className: 'device-popup'
+        });
+   
+    markers.push(marker);
+});
+
+// Fit map to show all markers
+if (markers.length > 0) {
+    const group = new L.featureGroup(markers);
+    map.fitBounds(group.getBounds().pad(0.1));
+}
+
+// Function to view device details (keeping your original function)
+function viewDevice(deviceId) {
+    window.location.href = `/devices/${deviceId}`;
+}
+
+console.log(`Map initialized with ${devices.length} devices`);
+</script>
+{% endblock %}

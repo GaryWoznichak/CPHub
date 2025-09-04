@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4><i class="fas fa-plus"></i> Add New CyberPhysical Device</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="row">
+                            <!-- Basic Info -->
+                            <div class="col-md-6">
+                                <h5>Device Information</h5>
+                                
+                                <div class="mb-3">
+                                    <label for="device_name" class="form-label">Device Name *</label>
+                                    <input type="text" class="form-control" id="device_name" name="device_name" required>
+                                    <small class="form-text text-muted">e.g., "Warehouse Door Monitor"</small>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="device_type" class="form-label">Device Type *</label>
+                                    <select class="form-control" id="device_type" name="device_type" required>
+                                        <option value="">Select Type</option>
+                                        <option value="CyberPhysical Unit">CyberPhysical Unit</option>
+                                        <option value="Camera System">Camera System</option>
+                                        <option value="Access Control">Access Control</option>
+                                        <option value="Sensor Array">Sensor Array</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="model" class="form-label">Model *</label>
+                                    <select class="form-control" id="model" name="model" required>
+                                        <option value="">Select Model</option>
+                                        <option value="PV 100 Series">PV 100 Series</option>
+                                        <option value="PV 200 Series">PV 200 Series</option>
+                                        <option value="PV 300 Series">PV 300 Series</option>
+                                        <option value="Industrial OTR">Industrial OTR</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="serial_number" class="form-label">Serial Number</label>
+                                    <input type="text" class="form-control" id="serial_number" name="serial_number">
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="location" class="form-label">Location *</label>
+                                    <input type="text" class="form-control" id="location" name="location" required>
+                                    <small class="form-text text-muted">e.g., "Traffic Box 42A, Main St & 5th Ave"</small>
+                                </div>
+                            </div>
+                            
+                            <!-- Connection Info -->
+                            <div class="col-md-6">
+                                <h5>Connection Settings</h5>
+                                
+                                <div class="mb-3">
+                                    <label for="ip_address" class="form-label">IP Address *</label>
+                                    <input type="text" class="form-control" id="ip_address" name="ip_address" 
+                                           placeholder="192.168.1.100" required>
+                                    <small class="form-text text-muted">Local network IP address</small>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="port" class="form-label">Port</label>
+                                    <input type="number" class="form-control" id="port" name="port" 
+                                           value="5675" min="1" max="65535">
+                                    <small class="form-text text-muted">Default: 5675</small>
+                                </div>
+                                
+                                {% if hub %}
+                                <div class="mb-3">
+                                    <label class="form-label">Registration Key</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" value="{{ hub.master_registration_key }}" readonly>
+                                        <button class="btn btn-outline-secondary" type="button" 
+                                                onclick="copyToClipboard('{{ hub.master_registration_key }}')">
+                                            <i class="fas fa-copy"></i> Copy
+                                        </button>
+                                    </div>
+                                    <small class="form-text text-muted">This key will be auto-assigned to the device</small>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('list_devices') }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Back to Devices
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Add Device
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-info-circle"></i> Setup Instructions</h5>
+                </div>
+                <div class="card-body">
+                    <ol>
+                        <li>Fill in device information and location</li>
+                        <li>Select the correct PacketViper model</li>
+                        <li>Enter the device's local IP address</li>
+                        <li>Copy the registration key</li>
+                        <li>Configure the CyberPhysical device with:
+                            <ul>
+                                <li>Hub IP: <code>{{ request.host }}</code></li>
+                                <li>Registration Key: <code>{{ hub.master_registration_key if hub else 'Not initialized' }}</code></li>
+                            </ul>
+                        </li>
+                        <li>Add device to hub</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(function() {
+        // Show success feedback
+        alert('Registration key copied to clipboard!');
+    });
+}
+</script>
+{% endblock %}

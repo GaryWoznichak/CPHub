@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Security Events</h2>
+
+{% if events %}
+    <table>
+        <thead>
+            <tr>
+                <th>Event Type</th>
+                <th>Device</th>
+                <th>Timestamp</th>
+                <th>Severity</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in events %}
+            <tr>
+                <td>{{ event.event_type }}</td>
+                <td>{{ event.device.device_name if event.device else 'N/A' }}</td>
+                <td>{{ event.event_timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                <td>{{ event.severity_level }}</td>
+                <td>{{ event.is_resolved and 'Resolved' or 'Unresolved' }}</td>
+                <td>
+                    <a href="{{ url_for('view_event', event_id=event.event_id) }}">View</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p>No events found.</p>
+{% endif %}
+<a href="#" class="button">Record New Event</a>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2><i class="fas fa-exclamation-triangle"></i> Emergency Key Reset</h2>
+    
+    <div class="warning-banner">
+        <strong>WARNING:</strong> This will generate a new registration key and disconnect ALL devices!
+    </div>
+    
+    {% if not reset_complete %}
+    <form method="POST" onsubmit="return confirm('Are you sure? This will disconnect all devices!')">
+        <div class="form-group">
+            <label for="admin_password">Admin Password:</label>
+            <input type="password" name="admin_password" class="form-control" required>
+        </div>
+        <button type="submit" class="btn btn-danger">
+            <i class="fas fa-key"></i> Emergency Reset Key
+        </button>
+    </form>
+    {% endif %}
+</div>
+
+<style>
+.warning-banner {
+    background: #e74c3c;
+    color: white;
+    padding: 15px;
+    border-radius: 6px;
+    margin: 20px 0;
+}
+
+.form-group {
+    margin: 20px 0;
+}
+
+.form-control {
+    background: #34495e;
+    border: 1px solid #2c3e50;
+    color: #ecf0f1;
+    padding: 10px;
+    border-radius: 4px;
+}
+</style>
+{% endblock %}

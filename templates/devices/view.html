@@ -1,0 +1,560 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <!-- Header Section -->
+    <div class="device-detail-header">
+        <div class="header-left">
+            <h1>{{ device.device_name }}</h1>
+            <div class="device-subtitle">{{ device.device_type }} • Serial: {{ device.serial_number }}</div>
+        </div>
+        <div class="header-right">
+            <div class="status-indicator status-{{ 'connected' if device.approval_status == 'approved' else (device.approval_status or 'unknown') }}">
+                {% if device.approval_status == 'approved' %}
+                    <i class="fas fa-check-circle"></i> Connected
+                {% elif device.approval_status == 'pending' %}
+                    <i class="fas fa-clock"></i> Pending
+                {% else %}
+                    <i class="fas fa-times-circle"></i> Offline
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Back and Edit Buttons -->
+    <div class="mb-4">
+        <div class="header-buttons">
+            <a href="{{ url_for('list_devices') }}" class="action-button">
+                <i class="fas fa-arrow-left"></i>
+                <span>Back to Devices</span>
+            </a>
+            <a href="{{ url_for('edit_device', device_id=device.device_id) }}" class="action-button">
+                <i class="fas fa-edit"></i>
+                <span>Edit Device</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Device Information Cards -->
+    <div class="device-cards-grid">
+        <!-- Basic Information -->
+        <div class="info-card">
+            <div class="card-header">
+                <h3><i class="fas fa-info-circle"></i> Device Information</h3>
+            </div>
+            <div class="card-body">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="label">Device ID:</span>
+                        <span class="value">#{{ device.device_id }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Type:</span>
+                        <span class="value">{{ device.device_type }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Model:</span>
+                        <span class="value">{{ device.model_number }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Serial Number:</span>
+                        <span class="value">{{ device.serial_number }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Status:</span>
+                        <span class="value badge badge-{{ 'success' if device.is_active else 'danger' }}">
+                            {{ 'Active' if device.is_active else 'Inactive' }}
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Description:</span>
+                        <span class="value">{{ device.description or 'N/A' }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Connection Details -->
+        <div class="info-card">
+            <div class="card-header">
+                <h3><i class="fas fa-network-wired"></i> Connection Details</h3>
+            </div>
+            <div class="card-body">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="label">IP Address:</span>
+                        <span class="value">
+                            {% if device.tunnel_port and device.tunnel_status == 'connected' %}
+                                Tunnel (Port {{ device.tunnel_port }})
+                            {% else %}
+                                {{ device.ip_address or 'Not configured' }}
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Port:</span>
+                        <span class="value">{{ device.port or 'Default' }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Connection Status:</span>
+                        <span class="value">
+                            <span class="status-badge status-{{ 'connected' if device.approval_status == 'approved' else (device.approval_status or 'unknown') }}">
+                                {% if device.approval_status == 'approved' %}
+                                    CONNECTED
+                                {% elif device.approval_status == 'pending' %}
+                                    PENDING
+                                {% else %}
+                                    UNKNOWN
+                                {% endif %}
+                            </span>
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Registration Key:</span>
+                        <span class="value registration-key">
+                            {% if device.registration_key %}
+                                {{ device.registration_key[:8] }}...
+                            {% else %}
+                                Not set
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Last Seen:</span>
+                        <span class="value">
+                            {% if device.last_seen %}
+                                {{ device.last_seen.strftime('%Y-%m-%d %H:%M:%S') }}
+                            {% else %}
+                                Never
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Last Heartbeat:</span>
+                        <span class="value">
+                            {% if device.last_heartbeat %}
+                                {{ device.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S') }}
+                            {% else %}
+                                Never
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Location Information -->
+        <div class="info-card">
+            <div class="card-header">
+                <h3><i class="fas fa-map-marker-alt"></i> Location Information</h3>
+            </div>
+            <div class="card-body">
+                <div class="info-grid">
+                    <div class="info-item full-width">
+                        <span class="label">Location:</span>
+                        <span class="value">
+                            {% if device.locations.first() %}
+                                {{ device.locations.first().building_name or device.locations.first().location_name or 'Location set' }}
+                            {% else %}
+                                No location set
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="info-card">
+            <div class="card-header">
+                <h3><i class="fas fa-tools"></i> Quick Actions</h3>
+            </div>
+            <div class="card-body">
+                <div class="actions-grid">
+                    <button class="action-btn ping-btn" onclick="pingDevice({{ device.device_id }}, '{{ device.ip_address }}')">
+                        <i class="fas fa-satellite-dish"></i>
+                        <span>Ping Device</span>
+                    </button>
+                    <button class="action-btn remote-btn" onclick="remoteAccess({{ device.device_id }}, '{{ device.ip_address }}', {{ device.port }})">
+                        <i class="fas fa-external-link-alt"></i>
+                        <span>Remote Access</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Device Detail Page Styles */
+.device-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #34495e;
+}
+
+.device-detail-header h1 {
+    color: #ecf0f1;
+    font-size: 2.2em;
+    font-weight: 600;
+    margin: 0;
+}
+
+.device-subtitle {
+    color: #bdc3c7;
+    font-size: 1.1em;
+    margin-top: 5px;
+}
+
+.status-indicator {
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 1.1em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-indicator.status-connected {
+    background: rgba(39, 174, 96, 0.2);
+    color: #27ae60;
+    border: 2px solid #27ae60;
+}
+
+.status-indicator.status-pending {
+    background: rgba(243, 156, 18, 0.2);
+    color: #f39c12;
+    border: 2px solid #f39c12;
+}
+
+.status-indicator.status-disconnected {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+    border: 2px solid #e74c3c;
+}
+
+.header-buttons {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 30px; /* Added space between buttons and cards */
+}
+
+.action-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center; /* Center content inside button */
+    gap: 8px;
+    padding: 12px 20px;
+    background: #3498db;
+    color: white;
+    text-decoration: none;
+    border-radius: 6px;
+    border: 1px solid #2980b9;
+    transition: all 0.3s;
+    font-size: 0.9em;
+    font-weight: 500;
+    text-align: center; /* Center text */
+    min-width: 140px; /* Ensure consistent button width */
+}
+
+.action-button:hover {
+    background: #2980b9;
+    border-color: #21618c;
+    transform: translateY(-1px);
+    color: white;
+    text-decoration: none;
+}
+
+/* Removed edit-button specific styling to make both buttons same color */
+
+.device-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 20px;
+}
+
+.info-card {
+    background: #34495e;
+    border-radius: 8px;
+    border: 1px solid #2c3e50;
+    overflow: hidden;
+}
+
+.info-card .card-header {
+    background: #2c3e50;
+    padding: 15px 20px;
+    border-bottom: 1px solid #34495e;
+}
+
+.info-card .card-header h3 {
+    margin: 0;
+    color: #ecf0f1;
+    font-size: 1.1em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.info-card .card-body {
+    padding: 20px;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 15px;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.info-item:last-child {
+    border-bottom: none;
+}
+
+.info-item.full-width {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+}
+
+.info-item .label {
+    font-weight: 600;
+    color: #bdc3c7;
+    min-width: 130px;
+}
+
+.info-item .value {
+    color: #ecf0f1;
+    font-weight: 500;
+}
+
+.registration-key {
+    font-family: 'Courier New', monospace;
+    background: rgba(0,0,0,0.3);
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.status-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.status-connected {
+    background: #27ae60;
+    color: white;
+}
+
+.status-badge.status-pending {
+    background: #f39c12;
+    color: white;
+}
+
+.status-badge.status-disconnected {
+    background: #e74c3c;
+    color: white;
+}
+
+.badge-success {
+    background: #27ae60;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 600;
+}
+
+.badge-danger {
+    background: #e74c3c;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 600;
+}
+
+.actions-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.action-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.75em;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    text-transform: none;
+    letter-spacing: normal;
+    background-color: #3498db;
+    color: white;
+    min-height: 44px;
+}
+
+.action-btn:hover {
+    background-color: #2980b9;
+    transform: translateY(-1px);
+}
+
+.ping-btn.success {
+    background-color: #27ae60;
+}
+
+.ping-btn.error {
+    background-color: #e74c3c;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .device-cards-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .device-detail-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+    
+    .actions-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .header-buttons {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .action-button {
+        width: 100%;
+    }
+}
+</style>
+
+<script>
+function pingDevice(deviceId, deviceIp) {
+    const button = event.target.closest('.ping-btn');
+    const originalContent = button.innerHTML;
+    
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Testing...</span>';
+    button.disabled = true;
+    
+    fetch(`/api/devices/${deviceId}/ping`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                button.innerHTML = '<i class="fas fa-check"></i><span>Online</span>';
+                button.classList.add('success');
+                
+                const connectionType = data.connection_type || 'unknown';
+                const target = data.target || 'unknown';
+                const message = data.message || 'Connected';
+                
+                alert(`🟢 Device is reachable!\n\nConnection: ${connectionType}\nTarget: ${target}\nResponse: ${message}\nStatus: ${data.status || 'Connected'}`);
+            } else {
+                button.innerHTML = '<i class="fas fa-times"></i><span>Failed</span>';
+                button.classList.add('error');
+                
+                const connectionType = data.connection_type || 'unknown';
+                const target = data.target || 'unknown';
+                
+                alert(`🔴 Connection failed!\n\nConnection Type: ${connectionType}\nTarget: ${target}\nError: ${data.error}`);
+            }
+        })
+        .catch(error => {
+            button.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>Error</span>';
+            button.classList.add('error');
+            alert(`⚠️ Network error: ${error.message}`);
+        })
+        .finally(() => {
+            setTimeout(() => {
+                button.innerHTML = originalContent;
+                button.disabled = false;
+                button.classList.remove('success', 'error');
+            }, 2000);
+        });
+}
+
+function remoteAccess(deviceId, deviceIp, devicePort) {
+    // First, check if this device has a tunnel connection available
+    fetch(`/api/devices/${deviceId}/connection_info`)
+        .then(response => response.json())
+        .then(data => {
+            let deviceUrl;
+            let connectionType;
+            
+            if (data.tunnel_port && data.tunnel_status === 'connected') {
+                // Use tunnel connection - connect to localhost with tunnel port
+                deviceUrl = `http://localhost:${data.tunnel_port}`;
+                connectionType = 'tunnel';
+                console.log(`🔗 Using tunnel connection to device ${deviceId} via port ${data.tunnel_port}`);
+            } else if (deviceIp && deviceIp !== 'N/A') {
+                // Use direct IP connection (fallback)
+                deviceUrl = `http://${deviceIp}:${devicePort}`;
+                connectionType = 'direct';
+                console.log(`🔗 Using direct IP connection to device ${deviceId} at ${deviceIp}`);
+            } else {
+                alert('❌ No connection method available for this device');
+                return;
+            }
+            
+            console.log(`Opening remote access to device ${deviceId} at ${deviceUrl} (${connectionType})`);
+            
+            // Open device interface in new tab
+            const newTab = window.open(deviceUrl, '_blank');
+            
+            // Check if popup was blocked
+            if (!newTab || newTab.closed || typeof newTab.closed == 'undefined') {
+                alert(`🔒 Popup blocked!\n\nPlease allow popups for this site, or manually navigate to:\n${deviceUrl}`);
+                
+                const userChoice = confirm(`Would you like to open the device interface in this tab instead?\n\n${deviceUrl}`);
+                if (userChoice) {
+                    window.location.href = deviceUrl;
+                }
+            } else {
+                // Success - log the access attempt
+                fetch(`/api/devices/${deviceId}/log_access`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: 'remote_access',
+                        timestamp: new Date().toISOString(),
+                        url: deviceUrl,
+                        connection_type: connectionType
+                    })
+                }).catch(err => console.log('Access logging failed:', err));
+                
+                console.log(`✅ Remote access opened successfully via ${connectionType}`);
+            }
+        })
+        .catch(error => {
+            console.error('Error getting device connection info:', error);
+            alert('❌ Error determining connection method');
+        });
+}
+</script>
+{% endblock %}

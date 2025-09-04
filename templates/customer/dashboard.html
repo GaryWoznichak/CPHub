@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <!-- Customer Header -->
+    <div class="customer-header">
+        <div class="customer-info">
+            <h1><i class="fas fa-building"></i> {{ customer.customer_name }}</h1>
+            <span class="customer-code">{{ customer.customer_code }}</span>
+        </div>
+        <div class="user-info">
+            <span>Welcome, {{ session.username }} ({{ session.role }})</span>
+            <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </a>
+        </div>
+    </div>
+
+    <!-- Alert Banner (if devices offline) -->
+    {% set connected_devices = devices|selectattr('connection_status', 'equalto', 'connected')|list %}
+    {% set tunnel_connected = devices|selectattr('tunnel_status', 'equalto', 'connected')|list %}
+    {% set all_connected = (connected_devices + tunnel_connected)|unique|list %}
+    {% set offline_count = devices|length - all_connected|length %}
+    {% if offline_count > 0 %}
+    <div class="alert-banner">
+        <i class="fas fa-exclamation-triangle"></i>
+        <strong>ALERT:</strong> {{ offline_count }} device{{ 's' if offline_count != 1 else '' }} offline
+    </div>
+    {% endif %}
+
+    <!-- Customer Isolation Notice -->
+    <div class="isolation-notice">
+        <i class="fas fa-lock"></i>
+        <strong>Secure Isolation:</strong> You can only access devices and data belonging to {{ customer.customer_name }}
+    </div>
+
+    <!-- Main Status Grid -->
+    <div class="status-grid">
+        <!-- Network Status Card -->
+        <div class="status-card network-status">
+            <div class="card-header">
+                <h3><i class="fas fa-network-wired"></i> Your Network Status</h3>
+            </div>
+            <div class="card-body">
+                <div class="metrics-row">
+                    <div class="metric-item connected">
+                        <div class="metric-number">{{ all_connected|length }}</div>
+                        <div class="metric-label">ONLINE</div>
+                    </div>
+                    <div class="metric-item offline">
+                        <div class="metric-number">{{ offline_count }}</div>
+                        <div class="metric-label">OFFLINE</div>
+                    </div>
+                    <div class="metric-item total">
+                        <div class="metric-number">{{ devices|length }}</div>
+                        <div class="metric-label">TOTAL</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Customer Info Card -->
+        <div class="status-card">
+            <div class="card-header">
+                <h3><i class="fas fa-info-circle"></i> Account Information</h3>
+            </div>
+            <div class="card-body">
+                <div class="customer-details">
+                    <div class="detail-row">
+                        <span class="label">Customer:</span>
+                        <span class="value">{{ customer.customer_name }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Code:</span>
+                        <span class="value">{{ customer.customer_code }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Plan:</span>
+                        <span class="value">{{ customer.subscription_plan|title }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">User Role:</span>
+                        <span class="value">{{ session.role|title }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Devices Section -->
+    <div class="devices-section">
+        <div class="section-header">
+            <h3><i class="fas fa-sitemap"></i> Your Devices</h3>
+            <span class="device-count">{{ devices|length }} device{{ 's' if devices|length != 1 else '' }}</span>
+        </div>
+        
+        {% if devices %}
+        <div class="devices-grid">
+            {% for device in devices %}
+            {% if device.connection_status == 'connected' or device.tunnel_status == 'connected' %}
+                {% set device_status = 'connected' %}
+            {% elif device.connection_status in ['pending', 'tunnel_pending'] %}
+                {% set device_status = 'pending' %}
+            {% else %}
+                {% set device_status = 'disconnected' %}
+            {% endif %}
+                <div class="device-card status-{{ device_status }}">
+                <div class="device-header" onclick="window.location.href='{{ url_for('view_device', device_id=device.device_id) }}'">
+                    <div class="device-name">{{ device.device_name }}</div>
+                    <div class="device-status">
+                        {% if device.connection_status == 'connected' %}
+                            <i class="fas fa-check-circle text-success"></i>
+                        {% elif device.connection_status == 'pending' or device.approval_status == 'pending' %}
+                            <i class="fas fa-clock text-warning"></i>
+                        {% else %}
+                            <i class="fas fa-times-circle text-danger"></i>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="device-details" onclick="window.location.href='{{ url_for('view_device', device_id=device.device_id) }}'">
+                    <div class="detail-row">
+                        <span class="label">Model:</span>
+                        <span class="value">{{ device.model_number or 'Unknown' }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Connection:</span>
+                        <span class="value">{{ 'Tunnel' if device.tunnel_port else (device.ip_address or 'N/A') }}</span>
+                    </div>
+                    {% if device.locations.first() %}
+                    <div class="detail-row">
+                        <span class="label">Location:</span>
+                        <span class="value">{{ device.locations.first().building_name[:25] }}{% if device.locations.first().building_name|length > 25 %}...{% endif %}</span>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="device-actions">
+                    <div class="actions-row">
+                        <button class="action-btn remote-btn" onclick="remoteAccess({{ device.device_id }}, '{{ device.ip_address }}', {{ device.port }})">
+                            <i class="fas fa-external-link-alt"></i>
+                            <span>Remote</span>
+                        </button>
+                        
+                        <button class="action-btn ping-btn" onclick="pingDevice({{ device.device_id }}, '{{ device.ip_address }}')">
+                            <i class="fas fa-satellite-dish"></i>
+                            <span>Ping</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="no-devices">
+            <i class="fas fa-plus-circle"></i>
+            <h4>No Devices Found</h4>
+            <p>No devices are currently assigned to {{ customer.customer_name }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.customer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #2c3e50;
+    color: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.customer-info h1 {
+    margin: 0;
+    font-size: 1.8em;
+}
+
+.customer-code {
+    background: rgba(255,255,255,0.2);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    margin-left: 10px;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.isolation-notice {
+    background: #27ae60;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    border-left: 4px solid #219a52;
+}
+
+.customer-details {
+    color: #ecf0f1;
+}
+
+.customer-details .detail-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.customer-details .detail-row:last-child {
+    border-bottom: none;
+}
+
+.customer-details .label {
+    color: #bdc3c7;
+    font-weight: 500;
+}
+
+.customer-details .value {
+    color: #ecf0f1;
+}
+</style>
+
+<script>
+// Include the same JavaScript functions from your main dashboard
+function remoteAccess(deviceId, deviceIp, devicePort) {
+    // Same as your existing remoteAccess function
+    fetch(`/api/devices/${deviceId}/connection_info`)
+        .then(response => response.json())
+        .then(data => {
+            let deviceUrl;
+            let connectionType;
+            
+            if (data.tunnel_port && data.tunnel_status === 'connected') {
+                deviceUrl = `/proxy/${deviceId}/`;
+                connectionType = 'tunnel';
+            } else if (deviceIp && deviceIp !== 'N/A') {
+                deviceUrl = `http://${deviceIp}:${devicePort}`;
+                connectionType = 'direct';
+            } else {
+                alert('❌ No connection method available for this device');
+                return;
+            }
+            
+            const newTab = window.open(deviceUrl, '_blank');
+            
+            if (!newTab || newTab.closed || typeof newTab.closed == 'undefined') {
+                alert(`🔒 Popup blocked!\n\nPlease allow popups for this site, or manually navigate to:\n${deviceUrl}`);
+            }
+        })
+        .catch(error => {
+            console.error('Error getting device connection info:', error);
+            alert('❌ Error determining connection method');
+        });
+}
+
+function pingDevice(deviceId, deviceIp) {
+    const button = event.target.closest('.ping-btn');
+    const originalContent = button.innerHTML;
+    
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Testing...</span>';
+    button.disabled = true;
+    
+    fetch(`/api/devices/${deviceId}/ping`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                button.innerHTML = '<i class="fas fa-check"></i><span>Online</span>';
+                button.classList.add('success');
+                alert(`🟢 Device is reachable!\n\nConnection: ${data.connection_type}\nTarget: ${data.target}`);
+            } else {
+                button.innerHTML = '<i class="fas fa-times"></i><span>Failed</span>';
+                button.classList.add('error');
+                alert(`🔴 Connection failed!\n\nType: ${data.connection_type}\nTarget: ${data.target}\nError: ${data.error}`);
+            }
+        })
+        .catch(error => {
+            button.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>Error</span>';
+            button.classList.add('error');
+            alert(`⚠️ Network error: ${error.message}`);
+        })
+        .finally(() => {
+            setTimeout(() => {
+                button.innerHTML = originalContent;
+                button.disabled = false;
+                button.classList.remove('success', 'error');
+            }, 2000);
+        });
+}
+</script>
+{% endblock %}

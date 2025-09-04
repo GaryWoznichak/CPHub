@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2><i class="fas fa-key"></i> Registration Key Information</h2>
+    
+    {% if hub %}
+    <div class="key-display">
+        <h4>Current Registration Key:</h4>
+        <div class="current-key" onclick="copyKey('{{ hub.master_registration_key }}')">
+            {{ hub.master_registration_key }}
+            <i class="fas fa-copy copy-icon"></i>
+        </div>
+        <p class="key-note">
+            <i class="fas fa-info-circle"></i> 
+            This key is configured on all CyberPhysical devices. Click to copy.
+        </p>
+    </div>
+    
+    <div class="devices-info">
+        <h5><i class="fas fa-network-wired"></i> Devices using this key:</h5>
+        {% if devices %}
+            <ul class="device-list">
+            {% for device in devices %}
+                <li class="device-item">
+                    <span class="device-name">{{ device.device_name }}</span>
+                    <span class="device-status status-{{ device.connection_status or 'unknown' }}">
+                        {{ device.connection_status or 'unknown' }}
+                    </span>
+                </li>
+            {% endfor %}
+            </ul>
+        {% else %}
+            <p class="no-devices">No devices registered yet.</p>
+        {% endif %}
+    </div>
+    
+    <div class="security-notice">
+        <i class="fas fa-shield-alt"></i>
+        <strong>Security Notice:</strong> This registration key cannot be changed from this interface 
+        to prevent accidental disconnection of devices. Contact PacketViper support if key reset is required.
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.key-display {
+    background: #34495e;
+    padding: 25px;
+    border-radius: 8px;
+    margin: 20px 0;
+    border-left: 4px solid #3498db;
+}
+
+.current-key {
+    font-family: 'Courier New', monospace;
+    font-size: 1.4em;
+    background: #2c3e50;
+    padding: 15px;
+    border-radius: 4px;
+    color: #3498db;
+    margin: 15px 0;
+    cursor: pointer;
+    border: 2px dashed #3498db;
+    transition: all 0.3s;
+    position: relative;
+}
+
+.current-key:hover {
+    background: #1a252f;
+    border-color: #2980b9;
+}
+
+.copy-icon {
+    float: right;
+    color: #bdc3c7;
+    font-size: 0.8em;
+}
+
+.key-note {
+    color: #bdc3c7;
+    font-style: italic;
+    margin-top: 10px;
+}
+
+.devices-info {
+    background: #34495e;
+    padding: 20px;
+    border-radius: 8px;
+    margin: 20px 0;
+}
+
+.device-list {
+    list-style: none;
+    padding: 0;
+}
+
+.device-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.device-item:last-child {
+    border-bottom: none;
+}
+
+.device-name {
+    color: #ecf0f1;
+    font-weight: 500;
+}
+
+.device-status {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    font-weight: 500;
+}
+
+.status-connected { background: #27ae60; color: white; }
+.status-pending { background: #f39c12; color: white; }
+.status-disconnected, .status-unknown { background: #e74c3c; color: white; }
+
+.security-notice {
+    background: #2c3e50;
+    padding: 15px;
+    border-radius: 6px;
+    border-left: 4px solid #f39c12;
+    color: #ecf0f1;
+    margin-top: 20px;
+}
+
+.no-devices {
+    color: #bdc3c7;
+    font-style: italic;
+}
+</style>
+
+<script>
+    function copyKey(key) {
+        // Try the modern clipboard API first
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(key).then(function() {
+                showCopySuccess();
+            }).catch(function(err) {
+                // Fallback if clipboard API fails
+                fallbackCopyTextToClipboard(key);
+            });
+        } else {
+            // Fallback for older browsers or non-HTTPS
+            fallbackCopyTextToClipboard(key);
+        }
+    }
+    
+    function fallbackCopyTextToClipboard(text) {
+        // Create temporary text area
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                showCopySuccess();
+            } else {
+                showCopyError();
+            }
+        } catch (err) {
+            showCopyError();
+        }
+        
+        document.body.removeChild(textArea);
+    }
+    
+    function showCopySuccess() {
+        const keyElement = document.querySelector('.current-key');
+        const originalContent = keyElement.innerHTML;
+        const originalBg = keyElement.style.backgroundColor;
+        
+        keyElement.style.backgroundColor = '#27ae60';
+        keyElement.innerHTML = '{{ hub.master_registration_key }} <i class="fas fa-check"></i>';
+        
+        setTimeout(() => {
+            keyElement.style.backgroundColor = originalBg;
+            keyElement.innerHTML = originalContent;
+        }, 1500);
+    }
+    
+    function showCopyError() {
+        const keyElement = document.querySelector('.current-key');
+        const originalContent = keyElement.innerHTML;
+        
+        keyElement.innerHTML = '{{ hub.master_registration_key }} <i class="fas fa-exclamation-triangle" style="color: #e74c3c;"></i>';
+        
+        setTimeout(() => {
+            keyElement.innerHTML = originalContent;
+        }, 2000);
+        
+        // Show fallback message
+        alert('Copy failed. Key: {{ hub.master_registration_key }}');
+    }
+    </script>
+{% endblock %}
