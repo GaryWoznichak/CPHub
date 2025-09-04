@@ -1955,6 +1955,10 @@ def download_device_videos(device_id):
     video_dir = f"./videos/customer_{customer_id}/"
     os.makedirs(video_dir, exist_ok=True)
     
+    # Create thumbnails directory
+    thumbnail_dir = f"./thumbnails/customer_{customer_id}/"
+    os.makedirs(thumbnail_dir, exist_ok=True)
+    
     # Get list of videos from device
     video_list, error = device_manager.make_device_request(device_id, '/api/videos')
     if error:
@@ -1963,7 +1967,7 @@ def download_device_videos(device_id):
     if not video_list or not isinstance(video_list, list):
         return jsonify({'success': False, 'error': 'No videos found on device'}), 404
     
-    # Download each video file
+    # Download each video file AND its thumbnail
     downloaded_count = 0
     for video_info in video_list:
         try:
@@ -1975,26 +1979,46 @@ def download_device_videos(device_id):
             import requests
             hub = HubConfiguration.query.filter_by(is_active=True).first()
             if device.tunnel_port and device.tunnel_status == 'connected':
-                download_url = f"http://localhost:{device.tunnel_port}/api/download/{video_filename}"
+                download_url_base = f"http://localhost:{device.tunnel_port}"
             else:
-                download_url = f"http://{device.ip_address}:{device.port}/api/download/{video_filename}"
+                download_url_base = f"http://{device.ip_address}:{device.port}"
 
-            response = requests.get(download_url, headers={
+            # Download video
+            video_response = requests.get(f"{download_url_base}/api/download/{video_filename}", headers={
                 'X-Hub-ID': 'CyberPhysical Hub',
                 'X-Registration-Key': hub.master_registration_key
             }, timeout=30)
 
-            if response.status_code != 200:
-                logger.error(f"Failed to download {video_filename}: HTTP {response.status_code}")
+            if video_response.status_code != 200:
+                logger.error(f"Failed to download {video_filename}: HTTP {video_response.status_code}")
                 continue
 
-            # Save to customer directory
-            local_path = os.path.join(video_dir, video_filename)
-            with open(local_path, 'wb') as f:
-                f.write(response.content)
+            # Save video to customer directory
+            video_path = os.path.join(video_dir, video_filename)
+            with open(video_path, 'wb') as f:
+                f.write(video_response.content)
+            
+            # Download corresponding thumbnail
+            thumbnail_filename = video_filename.replace('.ogv', '.jpg').replace('.webm', '.jpg').replace('.mp4', '.jpg')
+            try:
+                thumbnail_response = requests.get(f"{download_url_base}/thumbnails/{thumbnail_filename}", headers={
+                    'X-Hub-ID': 'CyberPhysical Hub',
+                    'X-Registration-Key': hub.master_registration_key
+                }, timeout=10)
+                
+                if thumbnail_response.status_code == 200:
+                    thumbnail_path = os.path.join(thumbnail_dir, thumbnail_filename)
+                    with open(thumbnail_path, 'wb') as f:
+                        f.write(thumbnail_response.content)
+                    logger.info(f"Downloaded thumbnail: {thumbnail_filename}")
+                else:
+                    logger.warning(f"Thumbnail not available for {video_filename}")
+                    
+            except Exception as thumb_error:
+                logger.warning(f"Failed to download thumbnail for {video_filename}: {thumb_error}")
             
             downloaded_count += 1
-            logger.info(f"Downloaded video: {local_path}")
+            logger.info(f"Downloaded video: {video_path}")
             
         except Exception as e:
             logger.error(f"Error downloading video {video_filename}: {e}")
@@ -2007,6 +2031,38 @@ def download_device_videos(device_id):
         'downloaded_count': downloaded_count,
         'total_videos': len(video_list)
     })
+
+@app.route('/thumbnails/<path:filename>')
+def serve_thumbnail(filename):
+    import os
+    """Serve thumbnail images with customer isolation"""
+    try:
+        if ".." in filename or filename.startswith("/"):
+            return "Invalid filename", 400
+        
+        # Check if user is logged in as a customer
+        if 'customer_id' in session:
+            customer_id = str(session['customer_id']).zfill(3)
+        else:
+            customer_id = '001'  # Default for admin view
+        
+        thumbnail_dir = f"./thumbnails/customer_{customer_id}/"
+        
+        # Check if directory exists
+        if not os.path.exists(thumbnail_dir):
+            logger.error(f"Thumbnail directory does not exist: {thumbnail_dir}")
+            return "Thumbnail directory not found", 404
+        
+        thumbnail_path = os.path.join(thumbnail_dir, filename)
+        if not os.path.exists(thumbnail_path):
+            logger.error(f"Thumbnail file not found: {thumbnail_path}")
+            return "Thumbnail not found", 404
+            
+        return send_from_directory(thumbnail_dir, filename)
+        
+    except Exception as e:
+        logger.error(f"Error serving thumbnail {filename}: {e}")
+        return f"Error serving thumbnail: {str(e)}", 500
 
 @app.route('/api/recordings')
 def list_recordings():
@@ -2023,7 +2079,7 @@ def list_recordings():
     
     if os.path.exists(video_dir):
         for filename in os.listdir(video_dir):
-            if filename.endswith('.webm'):
+            if filename.endswith('.ogv'):
                 filepath = os.path.join(video_dir, filename)
                 stat = os.stat(filepath)
                 videos.append({

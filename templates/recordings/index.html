@@ -18,45 +18,338 @@
         {% endif %}
     </div>
 
-    <!-- Coming Soon Placeholder -->
-    <!-- Replace the placeholder section with this: -->
-<div class="recordings-content">
-    <div class="recordings-controls">
-        <button onclick="syncVideos()" class="btn btn-primary">
-            <i class="fas fa-sync"></i> Sync from Devices
-        </button>
-        <button onclick="refreshList()" class="btn btn-secondary">
-            <i class="fas fa-refresh"></i> Refresh
-        </button>
-    </div>
-    
-    <div class="videos-grid" id="videos-container">
-        <!-- Videos will load here -->
+    <!-- Recordings Content -->
+    <div class="recordings-content">
+        <!-- Controls Bar -->
+        <div class="recordings-controls">
+            <div class="controls-left">
+                <button onclick="syncVideos()" class="btn btn-primary">
+                    <i class="fas fa-sync"></i> Sync from Devices
+                </button>
+                <button onclick="refreshList()" class="btn btn-secondary">
+                    <i class="fas fa-refresh"></i> Refresh
+                </button>
+            </div>
+            <div class="controls-right">
+                <span id="video-count">0 recordings</span>
+            </div>
+        </div>
+        
+        <!-- Videos Grid -->
+        <div class="videos-grid" id="videos-container">
+            <div class="loading-message">
+                <i class="fas fa-spinner fa-spin"></i> Loading recordings...
+            </div>
+        </div>
     </div>
 </div>
 
+<style>
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #34495e;
+}
+
+.dashboard-header h1 {
+    color: #ecf0f1;
+    font-size: 2.2em;
+    font-weight: 600;
+    margin: 0;
+}
+
+.customer-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-top: 8px;
+}
+
+.customer-code {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-weight: 500;
+}
+
+.isolation-badge {
+    background: #27ae60;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 500;
+}
+
+.recordings-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #34495e;
+    border-radius: 8px;
+    border: 1px solid #2c3e50;
+}
+
+.controls-left {
+    display: flex;
+    gap: 10px;
+}
+
+.controls-right {
+    color: #bdc3c7;
+    font-size: 0.9em;
+}
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9em;
+    font-weight: 600;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: #3498db;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #2980b9;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #5a6268;
+    transform: translateY(-1px);
+}
+
+.videos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.video-card {
+    background: #34495e;
+    border-radius: 6px;
+    border: 1px solid #2c3e50;
+    overflow: hidden;
+    transition: all 0.3s;
+    cursor: pointer;
+}
+
+.video-thumbnail {
+    position: relative;
+    height: 120px;
+    overflow: hidden;
+}
+
+.video-thumbnail img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.video-header {
+    background: #2c3e50;
+    padding: 10px;
+}
+
+.video-filename {
+    color: #ecf0f1;
+    font-weight: 500;
+    font-size: 0.8em;
+    margin-bottom: 5px;
+    word-break: break-all;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.video-metadata {
+    display: flex;
+    justify-content: space-between;
+    color: #bdc3c7;
+    font-size: 0.7em;
+    margin-bottom: 3px;
+}
+
+.click-to-download {
+    color: #95a5a6;
+    font-size: 0.65em;
+    text-align: center;
+}
+
+.video-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    border-color: #3498db;
+}
+
+.video-header {
+    background: #2c3e50;
+    padding: 15px;
+    border-bottom: 1px solid #34495e;
+}
+
+.video-filename {
+    color: #ecf0f1;
+    font-weight: 600;
+    font-size: 1em;
+    margin-bottom: 8px;
+    word-break: break-all;
+}
+
+.video-metadata {
+    display: flex;
+    justify-content: space-between;
+    color: #bdc3c7;
+    font-size: 0.85em;
+}
+
+.video-actions {
+    padding: 15px;
+    text-align: center;
+}
+
+.download-btn {
+    width: 100%;
+    padding: 12px;
+    background: #3498db;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    font-weight: 600;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.download-btn:hover {
+    background: #2980b9;
+    transform: translateY(-1px);
+}
+
+.loading-message, .no-videos {
+    text-align: center;
+    padding: 40px;
+    color: #bdc3c7;
+    grid-column: 1 / -1;
+}
+
+.no-videos {
+    background: #34495e;
+    border-radius: 8px;
+    border: 2px dashed #2c3e50;
+}
+
+.no-videos i {
+    font-size: 3em;
+    margin-bottom: 15px;
+    color: #bdc3c7;
+}
+
+.no-videos h4 {
+    color: #ecf0f1;
+    margin-bottom: 10px;
+}
+
+.no-videos p {
+    color: #bdc3c7;
+}
+
+.click-to-download {
+    color: #95a5a6;
+    font-size: 0.8em;
+    margin-top: 5px;
+}
+</style>
+
 <script>
 function loadVideos() {
+    const container = document.getElementById('videos-container');
+    const countElement = document.getElementById('video-count');
+    
+    container.innerHTML = '<div class="loading-message"><i class="fas fa-spinner fa-spin"></i> Loading recordings...</div>';
+    
     fetch('/api/recordings')
         .then(response => response.json())
         .then(videos => {
-            const container = document.getElementById('videos-container');
             if (videos.length === 0) {
-                container.innerHTML = '<p>No videos found. Click "Sync from Devices" to download videos.</p>';
+                container.innerHTML = `
+                    <div class="no-videos">
+                        <i class="fas fa-video"></i>
+                        <h4>No recordings found</h4>
+                        <p>Click "Sync from Devices" to download videos from your security devices.</p>
+                    </div>
+                `;
+                countElement.textContent = '0 recordings';
                 return;
             }
             
             container.innerHTML = videos.map(video => `
-                <div class="video-card">
-                    <h4>${video.filename}</h4>
-                    <p>Size: ${video.size} MB</p>
-                    <p>Date: ${video.date}</p>
-                    <button onclick="downloadVideo('${video.filename}')" class="btn btn-primary">
-                        <i class="fas fa-download"></i> Download
-                    </button>
+                <div class="video-card" onclick="downloadVideo('${video.filename}')">
+                    <div class="video-thumbnail">
+                        <img src="/thumbnails/${getThumbnailName(video.filename)}" 
+                            alt="Video thumbnail" 
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        <div class="thumbnail-placeholder" style="display: none;">
+                            <i class="fas fa-video"></i>
+                        </div>
+                    </div>
+                    <div class="video-header">
+                        <div class="video-filename">${video.filename}</div>
+                        <div class="video-metadata">
+                            <span><i class="fas fa-hdd"></i> ${video.size} MB</span>
+                            <span><i class="fas fa-calendar"></i> ${video.date}</span>
+                        </div>
+                        <div class="click-to-download">
+                            <i class="fas fa-download"></i> Click to download
+                        </div>
+                    </div>
                 </div>
             `).join('');
+            
+            countElement.textContent = `${videos.length} recording${videos.length !== 1 ? 's' : ''}`;
+        })
+        .catch(error => {
+            console.error('Error loading videos:', error);
+            container.innerHTML = `
+                <div class="no-videos">
+                    <i class="fas fa-exclamation-triangle" style="color: #e74c3c;"></i>
+                    <h4>Error Loading Recordings</h4>
+                    <p>Failed to load recordings: ${error.message}</p>
+                </div>
+            `;
+            countElement.textContent = 'Error';
         });
+}
+
+function getThumbnailName(filename) {
+    // Convert recording_A_2025-09-04_11-31-16.ogv to recording_A_2025-09-04_11-31-16.jpg
+    return filename.replace(/\.(ogv|webm|mp4|avi|mkv|mov)$/, '.jpg');
 }
 
 function downloadVideo(filename) {
@@ -64,10 +357,9 @@ function downloadVideo(filename) {
 }
 
 function syncVideos() {
-    const button = event.target;
+    const button = event.target.closest('.btn-primary');
     const originalText = button.innerHTML;
     
-    // Show loading state
     button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
     button.disabled = true;
     
@@ -78,9 +370,8 @@ function syncVideos() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert(`Downloaded ${data.downloaded_count} videos from ${data.message}`);
-            // Refresh the video list to show new downloads
-            loadVideos();
+            alert(`Downloaded ${data.downloaded_count} videos`);
+            loadVideos(); // Refresh the list
         } else {
             alert(`Sync failed: ${data.error}`);
         }
@@ -89,7 +380,6 @@ function syncVideos() {
         alert(`Sync error: ${error.message}`);
     })
     .finally(() => {
-        // Restore button
         button.innerHTML = originalText;
         button.disabled = false;
     });
@@ -102,54 +392,4 @@ function refreshList() {
 // Load videos when page loads
 document.addEventListener('DOMContentLoaded', loadVideos);
 </script>
-</div>
-
-<style>
-.recordings-placeholder {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 400px;
-    background: #34495e;
-    border-radius: 8px;
-    border: 2px dashed #2c3e50;
-}
-
-.placeholder-content {
-    text-align: center;
-    color: #ecf0f1;
-    max-width: 500px;
-}
-
-.placeholder-content i {
-    color: #bdc3c7;
-    margin-bottom: 20px;
-}
-
-.placeholder-content h3 {
-    color: #ecf0f1;
-    margin-bottom: 15px;
-}
-
-.placeholder-content p {
-    color: #bdc3c7;
-    margin-bottom: 30px;
-}
-
-.feature-list ul {
-    list-style: none;
-    padding: 0;
-}
-
-.feature-list li {
-    padding: 8px 0;
-    color: #bdc3c7;
-}
-
-.feature-list i {
-    color: #3498db;
-    margin-right: 10px;
-    width: 20px;
-}
-</style>
 {% endblock %}
