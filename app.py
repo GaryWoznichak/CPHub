@@ -2126,6 +2126,166 @@ def download_hub_recording(filename):
     
     return send_from_directory(video_dir, filename, as_attachment=True)
 
+#CP App API Routes
+@app.route('/api/mobile/devices', methods=['GET'])
+def mobile_api_devices():
+    try:
+        devices = SecurityDevice.query.all()
+        devices_data = []
+        
+        for device in devices:
+            # Use the same logic as your web interface for determining connection status
+            if device.connection_status == 'connected' or device.tunnel_status == 'connected':
+                actual_status = 'connected'
+            elif device.connection_status in ['pending', 'tunnel_pending']:
+                actual_status = 'pending'
+            else:
+                actual_status = 'disconnected'
+            
+            device_info = {
+                'id': device.device_id,
+                'name': device.device_name,
+                'ip_address': device.ip_address,
+                'device_type': device.device_type,
+                'status': actual_status,  # Use the calculated status
+                'last_seen': device.last_seen.isoformat() if device.last_seen else None,
+                'is_approved': device.approval_status == 'approved'
+            }
+            devices_data.append(device_info)
+        
+        return jsonify({
+            'success': True,
+            'devices': devices_data,
+            'count': len(devices_data)
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/mobile/cameras', methods=['GET'])
+def mobile_api_cameras():
+    try:
+        devices = SecurityDevice.query.filter_by(is_active=True).all()
+        cameras_data = []
+        
+        for device in devices:
+            # Check if device is connected
+            if device.connection_status == 'connected' or device.tunnel_status == 'connected':
+                status = 'online'
+            else:
+                status = 'offline'
+            
+            # Add both Camera A and Camera B for each device
+            cameras_data.append({
+                'device_id': device.device_id,
+                'device_name': device.device_name,
+                'camera_id': 'A',
+                'camera_name': f'{device.device_name} - Camera A',
+                'status': status,
+                'stream_url': f'/proxy/{device.device_id}/live/camera1' if device.tunnel_port else f'http://{device.ip_address}:{device.port}/live/camera1'
+            })
+            
+            cameras_data.append({
+                'device_id': device.device_id,
+                'device_name': device.device_name,
+                'camera_id': 'B',
+                'camera_name': f'{device.device_name} - Camera B',
+                'status': status,
+                'stream_url': f'/proxy/{device.device_id}/live/camera2' if device.tunnel_port else f'http://{device.ip_address}:{device.port}/live/camera2'
+            })
+        
+        return jsonify({
+            'success': True,
+            'cameras': cameras_data,
+            'count': len(cameras_data)
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# 3) Video recordings
+@app.route('/api/mobile/recordings', methods=['GET'])
+def mobile_api_recordings():
+    import os
+    try:
+        # For mobile, we'll default to customer 001 or make it configurable later
+        customer_id = '001'  # You can make this dynamic later
+        video_dir = f"./videos/customer_{customer_id}/"
+        recordings = []
+        
+        if os.path.exists(video_dir):
+            for filename in os.listdir(video_dir):
+                if filename.endswith('.ogv'):
+                    filepath = os.path.join(video_dir, filename)
+                    stat = os.stat(filepath)
+                    
+                    # Extract info from filename if possible
+                    camera_id = 'A' if '_A_' in filename or 'CameraA' in filename else 'B'
+                    
+                    recordings.append({
+                        'id': filename,
+                        'filename': filename,
+                        'camera_id': camera_id,
+                        'size_mb': round(stat.st_size / (1024*1024), 2),
+                        'date': datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                        'download_url': f'/api/recordings/download/{filename}',
+                        'thumbnail_url': f'/thumbnails/{filename.replace(".ogv", ".jpg")}'
+                    })
+        
+        # Sort by date, newest first
+        recordings.sort(key=lambda x: x['date'], reverse=True)
+        
+        return jsonify({
+            'success': True,
+            'recordings': recordings,
+            'count': len(recordings)
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# 4) Security events
+@app.route('/api/mobile/events', methods=['GET'])
+def mobile_api_events():
+    try:
+        # Get recent events (limit to last 50 for mobile)
+        events = SecurityEvent.query.order_by(SecurityEvent.event_timestamp.desc()).limit(50).all()
+        events_data = []
+        
+        for event in events:
+            events_data.append({
+                'id': event.event_id,
+                'type': event.event_type,
+                'device_id': event.device_id,
+                'device_name': event.device.device_name if event.device else 'Unknown',
+                'description': event.event_description,
+                'severity': event.severity_level,
+                'timestamp': event.event_timestamp.isoformat(),
+                'is_resolved': event.is_resolved,
+                'resolution_notes': event.resolution_notes
+            })
+        
+        return jsonify({
+            'success': True,
+            'events': events_data,
+            'count': len(events_data)
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500   
+
 # Run the application
 if __name__ == '__main__':
     with app.app_context():
