@@ -3,15 +3,19 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import secrets
 import string
+import ssl
+import os
 import requests
 import threading
 import time
+from flask_cors import CORS
 import logging
 import json
 from datetime import timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
+CORS(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://security_admin:$DuckFairyBeast77@localhost/security_management_system'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'hard-to-guess-security-key'
@@ -52,6 +56,37 @@ def create_customer_user(customer_id, username, password, email=None, role='admi
         role=role
     )
     return user
+
+def setup_ssl_context():
+    """Setup SSL context for HTTPS"""
+    ssl_dir = "ssl"
+    cert_file = os.path.join(ssl_dir, "hub_cert.pem")
+    key_file = os.path.join(ssl_dir, "hub_key.pem")
+    
+    if not os.path.exists(cert_file) or not os.path.exists(key_file):
+        logger.error("❌ SSL certificates not found!")
+        logger.error(f"Expected files: {cert_file}, {key_file}")
+        logger.error("Run: python generate_ssl_cert.py")
+        return None
+    
+    try:
+        # Create SSL context
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(cert_file, key_file)
+        
+        # Security settings
+        context.set_ciphers('ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:!aNULL:!MD5:!DSS')
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        
+        logger.info(f"✅ SSL context loaded successfully")
+        logger.info(f"📄 Certificate: {cert_file}")
+        logger.info(f"🔑 Private Key: {key_file}")
+        
+        return context
+        
+    except Exception as e:
+        logger.error(f"❌ Error setting up SSL context: {e}")
+        return None
 
 class DeviceMonitor:
     """Background service for real-time device monitoring"""
@@ -550,25 +585,31 @@ class DeviceManager:
         self.db = db
     
     def make_device_request(self, device_id, endpoint, method='GET', data=None, timeout=10):
-        """Make authenticated request to a registered device"""
+        """Make authenticated request to a registered device - HTTPS aware"""
         device = db.session.get(SecurityDevice, device_id)
         if not device:
             logger.error(f"Device {device_id} not found in database")
             return None, f"Device {device_id} not found"
         
-        #if not device.ip_address:
-            #logger.error(f"Device {device_id} has no IP address configured")
-            #return None, "Device IP address not configured"
-            
         # Try tunnel first, fallback to direct IP
         if device.tunnel_port and device.tunnel_status == 'connected':
-            url = f"http://localhost:{device.tunnel_port}{endpoint}"
+            # Tunnel connections go through localhost - check if hub is HTTPS
+            protocol = "https" if app.config.get('SSL_ENABLED', False) else "http"
+            url = f"{protocol}://localhost:{device.tunnel_port}{endpoint}"
             connection_type = "tunnel"
             logger.info(f"🔗 Using tunnel for device {device_id}: port {device.tunnel_port}")
         elif device.ip_address:
-            url = f"http://{device.ip_address}:{device.port}{endpoint}"
+            # For direct IP, assume device uses HTTPS on port 443 or HTTP on configured port
+            if device.port == 443:
+                protocol = "https"
+            elif hasattr(device, 'use_https') and device.use_https:
+                protocol = "https"
+            else:
+                protocol = "http"
+            
+            url = f"{protocol}://{device.ip_address}:{device.port}{endpoint}"
             connection_type = "direct"
-            logger.info(f"🔗 Using direct IP for device {device_id}: {device.ip_address}")
+            logger.info(f"🔗 Using direct {protocol.upper()} for device {device_id}: {device.ip_address}")
         else:
             logger.error(f"Device {device_id} has no tunnel or IP address configured")
             return None, "No connection method available"
@@ -579,12 +620,9 @@ class DeviceManager:
             logger.error("No active hub configuration found")
             return None, "Hub not configured"
         
-        # 🆕 ADD DEBUG LOGGING HERE
-        logger.info(f"🔑 === HUB SENDING REQUEST ===")
+        logger.info(f"🔑 === HUB SENDING HTTPS REQUEST ===")
         logger.info(f"🎯 Target: {device.device_name} ({device_id}) at {url}")
         logger.info(f"🔑 Hub master key: '{hub.master_registration_key}'")
-        logger.info(f"🔍 Key length: {len(hub.master_registration_key)}")
-        logger.info(f"🔍 Key repr: {repr(hub.master_registration_key)}")
         logger.info(f"Making {method} request to {device.device_name} ({device_id}) via {connection_type}: {endpoint}")
         
         # Authentication headers for device
@@ -598,20 +636,21 @@ class DeviceManager:
         logger.info(f"📤 Headers being sent: {headers}")
         
         try:
-            logger.info(f"Making {method} request to {device.device_name} ({device_id}): {endpoint}")
+            # Configure SSL verification
+            verify_ssl = False  # Set to True for production with proper certificates
             
             if method.upper() == 'GET':
-                response = requests.get(url, headers=headers, timeout=timeout)
+                response = requests.get(url, headers=headers, timeout=timeout, verify=verify_ssl)
             elif method.upper() == 'POST':
-                response = requests.post(url, headers=headers, json=data, timeout=timeout)
+                response = requests.post(url, headers=headers, json=data, timeout=timeout, verify=verify_ssl)
             elif method.upper() == 'PUT':
-                response = requests.put(url, headers=headers, json=data, timeout=timeout)
+                response = requests.put(url, headers=headers, json=data, timeout=timeout, verify=verify_ssl)
             elif method.upper() == 'DELETE':
-                response = requests.delete(url, headers=headers, timeout=timeout)
+                response = requests.delete(url, headers=headers, timeout=timeout, verify=verify_ssl)
             else:
                 return None, f"Unsupported HTTP method: {method}"
             
-            # 🆕 ADD RESPONSE DEBUG LOGGING
+            # Rest of your existing response handling code...
             logger.info(f"📥 Response status: {response.status_code}")
             logger.info(f"📥 Response headers: {dict(response.headers)}")
             logger.info(f"📥 Response content length: {len(response.content) if response.content else 0}")
@@ -619,7 +658,6 @@ class DeviceManager:
             # Check for authentication rejection (empty response)
             if response.status_code == 204 and not response.content:
                 logger.warning(f"🚫 Device {device_id} rejected authentication (204 empty response)")
-                # Update device status
                 device.connection_status = 'auth_failed'
                 device.last_seen = datetime.utcnow()
                 self.db.session.commit()
@@ -640,6 +678,13 @@ class DeviceManager:
                 # Not JSON response
                 return response.text, None
                 
+        except requests.exceptions.SSLError as e:
+            error = f"SSL error connecting to device {device_id}: {e}"
+            logger.error(error)
+            device.connection_status = 'ssl_error'
+            device.last_seen = datetime.utcnow()
+            self.db.session.commit()
+            return None, error
         except requests.exceptions.Timeout:
             error = f"Timeout connecting to device {device_id}"
             logger.error(error)
@@ -2296,7 +2341,7 @@ def get_device_recording_status(device_id):
         
         print(f"=== DEBUG: Starting recording status check for device {device_id} ===")
         
-        # Use device manager directly (same as other working endpoints)
+        # Use device manager to get camera status from the actual device
         camera_data, camera_error = device_manager.make_device_request(device_id, '/camera_status')
         
         print(f"Device manager result: data={camera_data}, error={camera_error}")
@@ -2318,19 +2363,27 @@ def get_device_recording_status(device_id):
             print(f"Checking Camera_1: '{camera_data.get('Camera_1')}'")
             print(f"Checking Camera_2: '{camera_data.get('Camera_2')}'")
             
-            # Check for Camera_1 recording
-            if camera_data:
-                # Check for Camera_1 recording
-                if camera_data.get('Camera_1') == 'Recording':
-                    is_recording = True
-                    recording_cameras.append('Camera_1')
-                
-                # Check for Camera_2 recording  
-                if camera_data.get('Camera_2') == 'Recording':
-                    is_recording = True
-                    recording_cameras.append('Camera_2')
+            # Check for Camera_1 recording - fix the key name
+            camera1_status = camera_data.get('Camera_1') or camera_data.get('Camera 1')
+            if camera1_status == 'Recording':
+                is_recording = True
+                recording_cameras.append('Camera_1')
+                print(f"✅ Camera_1 is recording!")
+            
+            # Check for Camera_2 recording - fix the key name  
+            camera2_status = camera_data.get('Camera_2') or camera_data.get('Camera 2')
+            if camera2_status == 'Recording':
+                is_recording = True
+                recording_cameras.append('Camera_2')
+                print(f"✅ Camera_2 is recording!")
         
         print(f"Final result: is_recording={is_recording}, cameras={recording_cameras}")
+
+        if camera_data:
+            print(f"=== ALL CAMERA DATA KEYS ===")
+            for key, value in camera_data.items():
+                print(f"Key: '{key}' = Value: '{value}'")
+            print(f"=== END CAMERA DATA ===")
         
         return jsonify({
             'success': True,
@@ -2348,6 +2401,37 @@ def get_device_recording_status(device_id):
             'error': str(e),
             'is_recording': False
         }), 500
+
+def setup_ssl_context():
+    """Setup SSL context for HTTPS"""
+    ssl_dir = "ssl"
+    cert_file = os.path.join(ssl_dir, "hub_cert.pem")
+    key_file = os.path.join(ssl_dir, "hub_key.pem")
+    
+    if not os.path.exists(cert_file) or not os.path.exists(key_file):
+        logger.error("❌ SSL certificates not found!")
+        logger.error(f"Expected files: {cert_file}, {key_file}")
+        logger.error("Run: python generate_ssl_cert.py")
+        return None
+    
+    try:
+        # Create SSL context
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(cert_file, key_file)
+        
+        # Security settings
+        context.set_ciphers('ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:!aNULL:!MD5:!DSS')
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        
+        logger.info(f"✅ SSL context loaded successfully")
+        logger.info(f"📄 Certificate: {cert_file}")
+        logger.info(f"🔑 Private Key: {key_file}")
+        
+        return context
+        
+    except Exception as e:
+        logger.error(f"❌ Error setting up SSL context: {e}")
+        return None
 
 # Run the application
 if __name__ == '__main__':
