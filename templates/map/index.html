@@ -249,6 +249,29 @@
     background: rgba(255,255,255,0.1) !important;
     border-radius: 4px;
 }
+
+/* Recording indicator - BRIGHT BLUE flashing animation */
+.recording .marker-icon {
+    background-color: #00bfff !important; /* Bright blue */
+    animation: recording-flash 0.8s infinite;
+    border-color: #fff !important;
+    box-shadow: 0 4px 12px rgba(0, 191, 255, 0.8) !important;
+    transform: scale(1.4) !important;
+    z-index: 1000 !important;
+}
+
+@keyframes recording-flash {
+    0%, 50% {
+        background-color: #00bfff; /* Bright blue */
+        box-shadow: 0 4px 12px rgba(0, 191, 255, 0.8), 0 0 0 8px rgba(0, 191, 255, 0.4);
+        transform: scale(1.4);
+    }
+    51%, 100% {
+        background-color: #0099ff; /* Slightly darker blue */
+        box-shadow: 0 4px 16px rgba(0, 153, 255, 1), 0 0 0 12px rgba(0, 153, 255, 0.2);
+        transform: scale(1.5);
+    }
+}
 </style>
 
 <!-- Leaflet CSS -->
@@ -450,7 +473,7 @@ function remoteAccessFromMap(deviceId, deviceIp, devicePort, button) {
             
             if (data.tunnel_port && data.tunnel_status === 'connected') {
                 // Use tunnel connection
-                deviceUrl = `http://localhost:${data.tunnel_port}`;
+                deviceUrl = `/proxy/${deviceId}/`;
                 connectionType = 'tunnel';
                 console.log(`🔗 Using tunnel connection to device ${deviceId} via port ${data.tunnel_port} from map`);
             } else if (deviceIp && deviceIp !== 'N/A') {
@@ -505,6 +528,68 @@ function remoteAccessFromMap(deviceId, deviceIp, devicePort, button) {
         });
 }
 
+// Recording status polling
+let recordingStatusInterval;
+
+function startRecordingStatusPolling() {
+    // Clear any existing interval
+    if (recordingStatusInterval) {
+        clearInterval(recordingStatusInterval);
+    }
+    
+    // Poll every 3 seconds for recording status
+    recordingStatusInterval = setInterval(checkAllRecordingStatus, 3000);
+    console.log('📹 Recording status polling started');
+}
+
+function checkAllRecordingStatus() {
+    console.log(`🔍 Checking recording status for ${devices.length} devices:`, devices.map(d => d.device_id));
+    
+    // Check recording status for all devices
+    devices.forEach(device => {
+        console.log(`📹 About to check device ${device.device_id}`);
+        checkDeviceRecordingStatus(device.device_id);
+    });
+}
+
+function checkDeviceRecordingStatus(deviceId) {
+    console.log(`🔍 Checking recording status for device ${deviceId}`);
+    
+    fetch(`/api/devices/${deviceId}/recording_status`)
+        .then(response => response.json())
+        .then(data => {
+            console.log(`📊 Device ${deviceId} recording status:`, data);
+            
+            if (data.success) {
+                console.log(`Device ${deviceId}: is_recording=${data.is_recording}, motion_enabled=${data.motion_enabled}`);
+                updateDeviceRecordingIndicator(deviceId, data.is_recording);
+            } else {
+                console.log(`❌ Device ${deviceId} recording status failed:`, data.error);
+            }
+        })
+        .catch(error => {
+            console.error(`Recording status check failed for device ${deviceId}:`, error);
+        });
+}
+
+function updateDeviceRecordingIndicator(deviceId, isRecording) {
+    // Find the marker for this device
+    const marker = markers.find(m => m.deviceId === deviceId);
+    if (!marker) return;
+    
+    const markerElement = marker.getElement();
+    if (!markerElement) return;
+    
+    if (isRecording) {
+        // Add recording class for flashing effect
+        markerElement.classList.add('recording');
+        console.log(`📹 Device ${deviceId} is recording - showing flashing indicator`);
+    } else {
+        // Remove recording class
+        markerElement.classList.remove('recording');
+    }
+}
+
 // Add devices to map
 const markers = [];
 devices.forEach(device => {
@@ -519,6 +604,8 @@ devices.forEach(device => {
             className: 'device-popup'
         });
    
+    // Store device ID for recording status updates
+    marker.deviceId = device.device_id;
     markers.push(marker);
 });
 
@@ -534,5 +621,19 @@ function viewDevice(deviceId) {
 }
 
 console.log(`Map initialized with ${devices.length} devices`);
+
+// Start polling after map is initialized
+setTimeout(startRecordingStatusPolling, 2000); // Start after 2 seconds
+
+// Stop polling when page is hidden, resume when visible
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') {
+        startRecordingStatusPolling();
+    } else {
+        if (recordingStatusInterval) {
+            clearInterval(recordingStatusInterval);
+        }
+    }
+});
 </script>
 {% endblock %}

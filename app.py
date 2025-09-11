@@ -2286,6 +2286,69 @@ def mobile_api_events():
             'error': str(e)
         }), 500   
 
+@app.route('/api/devices/<int:device_id>/recording_status')
+def get_device_recording_status(device_id):
+    """Check if any cameras on this device are currently recording due to motion detection"""
+    try:
+        device = db.session.get(SecurityDevice, device_id)
+        if not device:
+            return jsonify({'success': False, 'error': 'Device not found'}), 404
+        
+        print(f"=== DEBUG: Starting recording status check for device {device_id} ===")
+        
+        # Use device manager directly (same as other working endpoints)
+        camera_data, camera_error = device_manager.make_device_request(device_id, '/camera_status')
+        
+        print(f"Device manager result: data={camera_data}, error={camera_error}")
+        
+        if camera_error:
+            return jsonify({
+                'success': False, 
+                'error': camera_error,
+                'is_recording': False
+            })
+        
+        print(f"Camera data received: {camera_data}")
+        
+        # Check if any cameras are actively recording
+        is_recording = False
+        recording_cameras = []
+        
+        if camera_data:
+            print(f"Checking Camera_1: '{camera_data.get('Camera_1')}'")
+            print(f"Checking Camera_2: '{camera_data.get('Camera_2')}'")
+            
+            # Check for Camera_1 recording
+            if camera_data:
+                # Check for Camera_1 recording
+                if camera_data.get('Camera_1') == 'Recording':
+                    is_recording = True
+                    recording_cameras.append('Camera_1')
+                
+                # Check for Camera_2 recording  
+                if camera_data.get('Camera_2') == 'Recording':
+                    is_recording = True
+                    recording_cameras.append('Camera_2')
+        
+        print(f"Final result: is_recording={is_recording}, cameras={recording_cameras}")
+        
+        return jsonify({
+            'success': True,
+            'is_recording': is_recording,
+            'recording_cameras': recording_cameras,
+            'camera_data': camera_data
+        })
+        
+    except Exception as e:
+        print(f"Exception in recording status: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False, 
+            'error': str(e),
+            'is_recording': False
+        }), 500
+
 # Run the application
 if __name__ == '__main__':
     with app.app_context():
