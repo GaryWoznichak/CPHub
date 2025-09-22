@@ -5,6 +5,7 @@ import secrets
 import string
 import ssl
 import os
+import subprocess
 import requests
 import threading
 import time
@@ -2276,6 +2277,202 @@ def download_hub_recording(filename):
     
     return send_from_directory(video_dir, filename, as_attachment=True)
 
+
+@app.route('/api/update/check', methods=['GET'])
+@login_required
+def check_for_updates():
+    """Check if updates are available on GitHub"""
+    try:
+        # Get current commit hash
+        current_commit = subprocess.run(['git', 'rev-parse', 'HEAD'], 
+                                      capture_output=True, text=True, cwd='.')
+        if current_commit.returncode != 0:
+            return jsonify({'success': False, 'error': 'Not a git repository'})
+        
+        current_hash = current_commit.stdout.strip()
+        
+        # Fetch latest from origin without merging
+        fetch_result = subprocess.run(['git', 'fetch', 'origin'], 
+                                    capture_output=True, text=True, cwd='.')
+        if fetch_result.returncode != 0:
+            return jsonify({'success': False, 'error': 'Failed to fetch from GitHub'})
+        
+        # Get remote commit hash
+        remote_commit = subprocess.run(['git', 'rev-parse', 'origin/main'], 
+                                     capture_output=True, text=True, cwd='.')
+        if remote_commit.returncode != 0:
+            # Try 'master' branch if 'main' doesn't exist
+            remote_commit = subprocess.run(['git', 'rev-parse', 'origin/master'], 
+                                         capture_output=True, text=True, cwd='.')
+        
+        if remote_commit.returncode != 0:
+            return jsonify({'success': False, 'error': 'Could not get remote commit hash'})
+        
+        remote_hash = remote_commit.stdout.strip()
+        
+        # Check if update is available
+        update_available = current_hash != remote_hash
+        
+        # Get commit messages for changes
+        changes = []
+        if update_available:
+            log_result = subprocess.run([
+                'git', 'log', f'{current_hash}..{remote_hash}', 
+                '--oneline', '--max-count=10'
+            ], capture_output=True, text=True, cwd='.')
+            
+            if log_result.returncode == 0:
+                changes = log_result.stdout.strip().split('\n')
+                changes = [line for line in changes if line.strip()]
+        
+        return jsonify({
+            'success': True,
+            'update_available': update_available,
+            'current_commit': current_hash[:8],
+            'remote_commit': remote_hash[:8],
+            'changes': changes,
+            'last_check': datetime.utcnow().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error checking for updates: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/update/perform', methods=['POST'])
+@login_required
+def perform_update():
+    """Perform the update by pulling from GitHub"""
+    try:
+        # Check if we're in a clean state
+        status_result = subprocess.run(['git', 'status', '--porcelain'], 
+                                     capture_output=True, text=True, cwd='.')
+        
+        if status_result.stdout.strip():
+            return jsonify({
+                'success': False, 
+                'error': 'Working directory has uncommitted changes. Update aborted.'
+            })
+        
+        # Store current commit for rollback
+        current_commit = subprocess.run(['git', 'rev-parse', 'HEAD'], 
+                                      capture_output=True, text=True, cwd='.')
+        rollback_hash = current_commit.stdout.strip()
+        
+        # Pull the latest changes
+        pull_result = subprocess.run(['git', 'pull', 'origin'], 
+                                   capture_output=True, text=True, cwd='.')
+        
+        if pull_result.returncode != 0:
+            return jsonify({
+                'success': False, 
+                'error': f'Git pull failed: {pull_result.stderr}'
+            })
+        
+        # Check if any Python dependencies need updating
+        requirements_changed = 'requirements.txt' in pull_result.stdout
+        
+        update_info = {
+            'success': True,
+            'message': 'Update completed successfully',
+            'changes_pulled': pull_result.stdout,
+            'requirements_updated': requirements_changed,
+            'rollback_commit': rollback_hash[:8],
+            'restart_required': True
+        }
+        
+        # If requirements changed, try to update them
+        if requirements_changed and os.path.exists('requirements.txt'):
+            pip_result = subprocess.run([
+                'pip', 'install', '-r', 'requirements.txt'
+            ], capture_output=True, text=True)
+            
+            update_info['pip_update'] = {
+                'success': pip_result.returncode == 0,
+                'output': pip_result.stdout if pip_result.returncode == 0 else pip_result.stderr
+            }
+        
+        # Schedule restart in 5 seconds to allow response to be sent
+        def restart_server():
+            import time
+            time.sleep(5)
+            os.system('sudo systemctl restart cyberphysical-hub')  # Adjust service name as needed
+        
+        restart_thread = threading.Thread(target=restart_server, daemon=True)
+        restart_thread.start()
+        
+        return jsonify(update_info)
+        
+    except Exception as e:
+        logger.error(f"Error performing update: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/update/rollback', methods=['POST'])
+@login_required
+def rollback_update():
+    """Rollback to previous commit"""
+    try:
+        rollback_commit = request.json.get('commit_hash')
+        if not rollback_commit:
+            return jsonify({'success': False, 'error': 'No commit hash provided'})
+        
+        # Reset to previous commit
+        reset_result = subprocess.run(['git', 'reset', '--hard', rollback_commit], 
+                                    capture_output=True, text=True, cwd='.')
+        
+        if reset_result.returncode != 0:
+            return jsonify({
+                'success': False, 
+                'error': f'Rollback failed: {reset_result.stderr}'
+            })
+        
+        return jsonify({
+            'success': True,
+            'message': f'Rolled back to commit {rollback_commit[:8]}',
+            'restart_required': True
+        })
+        
+    except Exception as e:
+        logger.error(f"Error rolling back update: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/update/status')
+@login_required
+def update_status():
+    """Get current git status and update information"""
+    try:
+        # Get current branch
+        branch_result = subprocess.run(['git', 'branch', '--show-current'], 
+                                     capture_output=True, text=True, cwd='.')
+        current_branch = branch_result.stdout.strip() if branch_result.returncode == 0 else 'unknown'
+        
+        # Get current commit
+        commit_result = subprocess.run(['git', 'rev-parse', 'HEAD'], 
+                                     capture_output=True, text=True, cwd='.')
+        current_commit = commit_result.stdout.strip()[:8] if commit_result.returncode == 0 else 'unknown'
+        
+        # Get last commit message
+        message_result = subprocess.run(['git', 'log', '-1', '--pretty=%B'], 
+                                      capture_output=True, text=True, cwd='.')
+        last_message = message_result.stdout.strip() if message_result.returncode == 0 else 'No commit message'
+        
+        # Get remote URL
+        remote_result = subprocess.run(['git', 'remote', 'get-url', 'origin'], 
+                                     capture_output=True, text=True, cwd='.')
+        remote_url = remote_result.stdout.strip() if remote_result.returncode == 0 else 'No remote'
+        
+        return jsonify({
+            'success': True,
+            'current_branch': current_branch,
+            'current_commit': current_commit,
+            'last_commit_message': last_message,
+            'remote_url': remote_url,
+            'git_available': True
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting update status: {e}")
+        return jsonify({'success': False, 'error': str(e), 'git_available': False})
+
 #CP App API Routes
 @app.route('/api/mobile/devices', methods=['GET'])
 def mobile_api_devices():
@@ -2537,13 +2734,6 @@ def setup_ssl_context():
     except Exception as e:
         logger.error(f"❌ Error setting up SSL context: {e}")
         return None
-
-# Add at the very end, just before if __name__ == '__main__':
-@app.route('/final_test')
-def final_test():
-    if 'customer_id' not in session:
-        return "NOT LOGGED IN"
-    return "LOGGED IN"
 
 # Run the application
 if __name__ == '__main__':

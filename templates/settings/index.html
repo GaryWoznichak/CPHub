@@ -33,6 +33,40 @@
             </div>
         </div>
 
+        <!-- Updates -->
+        <div class="settings-section">
+            <div class="section-header">
+                <h4><i class="fas fa-download"></i> System Updates</h4>
+            </div>
+            <div class="section-content">
+                <div class="settings-item">
+                    <div class="item-details">
+                        <div class="item-title">Software Updates</div>
+                        <div class="item-description">Check for and install updates from GitHub</div>
+                        <div class="update-status" id="update-status">
+                            <div class="status-row">
+                                <span class="label">Current Commit:</span>
+                                <span class="value" id="current-commit">Loading...</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="label">Branch:</span>
+                                <span class="value" id="current-branch">Loading...</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="label">Last Check:</span>
+                                <span class="value" id="last-check">Never</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="item-actions">
+                        <button class="update-button" id="check-updates-btn">
+                            <i class="fas fa-refresh"></i>Check for Updates
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Device Management -->
         <div class="settings-section">
             <div class="section-header">
@@ -196,10 +230,207 @@
     font-size: 0.9em;
     color: #bdc3c7;
 }
+
+.update-status {
+    margin-top: 10px;
+    padding: 10px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 4px;
+    font-size: 0.85em;
+}
+
+.status-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+}
+
+.status-row:last-child {
+    margin-bottom: 0;
+}
+
+.status-row .label {
+    color: #bdc3c7;
+}
+
+.status-row .value {
+    color: #ecf0f1;
+    font-family: 'Courier New', monospace;
+}
+
+.item-actions {
+    margin-left: 15px;
+}
+
+.update-button {
+    background: #3498db;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.3s;
+}
+
+.update-button:hover {
+    background: #2980b9;
+}
+
+.update-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.update-available {
+    background: #e67e22 !important;
+}
+
+.update-available:hover {
+    background: #d35400 !important;
+}
+
 </style>
 
 <script>
-    // Load current version
+    let updateStatusCache = null;
+    
+    function loadUpdateStatus() {
+        fetch('/api/update/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('current-commit').textContent = data.current_commit;
+                    document.getElementById('current-branch').textContent = data.current_branch;
+                    updateStatusCache = data;
+                } else {
+                    document.getElementById('current-commit').textContent = 'Git not available';
+                    document.getElementById('current-branch').textContent = 'N/A';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading update status:', error);
+                document.getElementById('current-commit').textContent = 'Error';
+                document.getElementById('current-branch').textContent = 'Error';
+            });
+    }
+    
+    function checkForUpdates() {
+        const button = event.target.closest('.update-button');
+        const originalContent = button.innerHTML;
+        
+        // Show loading state
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>Checking...';
+        button.disabled = true;
+        
+        fetch('/api/update/check')
+            .then(response => response.json())
+            .then(data => {
+                const now = new Date().toLocaleString();
+                document.getElementById('last-check').textContent = now;
+                
+                if (data.success) {
+                    if (data.update_available) {
+                        // Show update available
+                        button.innerHTML = '<i class="fas fa-download"></i>Update Available';
+                        button.classList.add('update-available');
+                        button.disabled = false; // Re-enable the button
+                        
+                        // Remove the old onclick and add new one
+                        button.removeAttribute('onclick');
+                        button.onclick = () => showUpdateModal(data);
+                        
+                        const changesText = data.changes.length > 0 ? 
+                            `\n\nRecent changes:\n${data.changes.slice(0, 5).join('\n')}` : '';
+                        
+                        alert(`🎉 Update Available!\n\nCurrent: ${data.current_commit}\nLatest: ${data.remote_commit}${changesText}\n\nClick "Update Available" button to install.`);
+                    } else {
+                        button.innerHTML = originalContent;
+                        button.disabled = false;
+                        alert(`✅ You're up to date!\n\nCurrent commit: ${data.current_commit}`);
+                    }
+                } else {
+                    button.innerHTML = originalContent;
+                    button.disabled = false;
+                    alert(`❌ Error checking for updates: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                button.innerHTML = originalContent;
+                button.disabled = false;
+                alert(`⚠️ Network error: ${error.message}`);
+            });
+    }
+    
+    function showUpdateModal(updateData) {
+        const changesText = updateData.changes.length > 0 ? 
+            `\nChanges to be applied:\n${updateData.changes.join('\n')}\n` : '';
+        
+        const confirmUpdate = confirm(
+            `Install Update?\n\n` +
+            `Current: ${updateData.current_commit}\n` +
+            `New: ${updateData.remote_commit}\n` +
+            `${changesText}\n` +
+            `WARNING: The hub will restart automatically after update.\n\n` +
+            `Continue with update?`
+        );
+        
+        if (confirmUpdate) {
+            performUpdate();
+        }
+    }
+    
+    function performUpdate() {
+        const button = document.querySelector('.update-available');
+        const originalContent = button.innerHTML;
+        
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>Updating...';
+        button.disabled = true;
+        
+        fetch('/api/update/perform', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`✅ Update completed successfully!\n\nThe hub will restart in 5 seconds.\n\nChanges applied:\n${data.changes_pulled}`);
+                
+                // Show countdown
+                let countdown = 5;
+                const countdownInterval = setInterval(() => {
+                    button.innerHTML = `<i class="fas fa-clock"></i>Restarting in ${countdown}s`;
+                    countdown--;
+                    
+                    if (countdown < 0) {
+                        clearInterval(countdownInterval);
+                        button.innerHTML = '<i class="fas fa-sync"></i>Restarting...';
+                        
+                        // Redirect to login after restart
+                        setTimeout(() => {
+                            window.location.href = '/login';
+                        }, 3000);
+                    }
+                }, 1000);
+            } else {
+                alert(`❌ Update failed: ${data.error}`);
+                button.innerHTML = originalContent;
+                button.disabled = false;
+            }
+        })
+        .catch(error => {
+            alert(`⚠️ Update error: ${error.message}`);
+            button.innerHTML = originalContent;
+            button.disabled = false;
+        });
+    }
+    
+    // Load current version info (keeping your existing version check)
     fetch('/api/version')
         .then(response => response.json())
         .then(data => {
@@ -211,33 +442,19 @@
             document.getElementById('current-version').textContent = 'Unknown';
         });
     
-    function checkForUpdates() {
-        const button = event.target.closest('.update-button');
-        const originalContent = button.innerHTML;
+    // Load status when page loads
+    document.addEventListener('DOMContentLoaded', loadUpdateStatus);
+
+
+    // Add this at the end of your script section
+    document.addEventListener('DOMContentLoaded', function() {
+        loadUpdateStatus();
         
-        // Show loading state
-        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>Checking...';
-        button.disabled = true;
-        
-        fetch('/api/check_updates')
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    alert(`❌ Error checking for updates: ${data.error}`);
-                } else if (data.update_available) {
-                    alert(`🎉 Update Available!\n\nCurrent: v${data.current_version}\nLatest: v${data.latest_version}\n\nRelease Notes:\n${data.release_notes}`);
-                } else {
-                    alert(`✅ You're up to date!\n\nCurrent Version: v${data.current_version}`);
-                }
-            })
-            .catch(error => {
-                alert(`⚠️ Network error: ${error.message}`);
-            })
-            .finally(() => {
-                // Restore button
-                button.innerHTML = originalContent;
-                button.disabled = false;
-            });
-    }
-    </script>
+        // Attach click handler to the update button
+        const updateButton = document.getElementById('check-updates-btn');
+        if (updateButton) {
+            updateButton.addEventListener('click', checkForUpdates);
+        }
+    });
+</script>
 {% endblock %}
