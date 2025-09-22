@@ -6,3 +6,4 @@ thumbnails/
 *.yaml
 generate_ssl_cert.py
 ssl/
+.env

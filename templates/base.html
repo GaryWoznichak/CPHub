@@ -57,6 +57,21 @@
                 console.log('Version check failed:', error);
                 document.getElementById('version-number').textContent = 'Unknown';
             });
+
+            
+        document.addEventListener('DOMContentLoaded', function() {
+            const alerts = document.querySelectorAll('.alert');
+            alerts.forEach(function(alert) {
+                if (alert.textContent.includes('Welcome back')) {
+                    setTimeout(function() {
+                        alert.style.transition = 'opacity 0.5s ease-out';
+                        alert.style.opacity = '0';
+                        setTimeout(() => alert.remove(), 500);
+                    }, 3000);
+                }
+            });
+        });
+
     </script>
 </body>
 </html>

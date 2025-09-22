@@ -15,6 +15,7 @@ from datetime import timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from datetime import timedelta
+from dotenv import load_dotenv
 
 def login_required(f):
     print(f"DECORATOR APPLIED: Wrapping {f.__name__}")
@@ -35,14 +36,18 @@ def login_required(f):
     decorated_function.__name__ = f.__name__
     return decorated_function
 
+load_dotenv()
+
 app = Flask(__name__)
+CORS(app)
+
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=12)  # Fallback max time
 app.config['SESSION_COOKIE_HTTPONLY'] = True  # Security
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
-CORS(app)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://security_admin:$DuckFairyBeast77@localhost/security_management_system'
+
+app.config['SQLALCHEMY_DATABASE_URI'] = f"mysql+pymysql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}/{os.getenv('DB_NAME')}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = 'hard-to-guess-security-key'
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 db = SQLAlchemy(app)
 
 
