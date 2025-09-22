@@ -13,8 +13,32 @@ import logging
 import json
 from datetime import timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
+from datetime import timedelta
+
+def login_required(f):
+    print(f"DECORATOR APPLIED: Wrapping {f.__name__}")
+    def decorated_function(*args, **kwargs):
+        print(f"LOGIN CHECK: Checking {f.__name__}")
+        
+        if 'customer_id' not in session:
+            print("REDIRECT: No login found")
+            return redirect(url_for('login'))
+        
+        # Update last activity time on every request (keeps session alive)
+        from datetime import datetime
+        session['last_activity'] = datetime.utcnow().isoformat()
+        
+        print("ACCESS GRANTED: Login found")
+        return f(*args, **kwargs)
+    
+    decorated_function.__name__ = f.__name__
+    return decorated_function
 
 app = Flask(__name__)
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=12)  # Fallback max time
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # Security
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
 CORS(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://security_admin:$DuckFairyBeast77@localhost/security_management_system'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -871,6 +895,7 @@ atexit.register(tunnel_detector.stop_detection)
 
 # Routes
 @app.route('/')
+@login_required
 def home():
     # Check if user is logged in as a customer
     if 'customer_id' in session:
@@ -905,11 +930,13 @@ def home():
                                is_customer_view=False)
 
 @app.route('/devices')
+@login_required
 def list_devices():
     devices = SecurityDevice.query.all()
     return render_template('devices/list.html', title='Security Devices', devices=devices)
 
 @app.route('/initialize_hub')
+@login_required
 def initialize_hub_route():
     try:
         hub = initialize_hub()
@@ -920,6 +947,7 @@ def initialize_hub_route():
         return redirect(url_for('home'))
 
 @app.route('/devices/<int:device_id>')
+@login_required
 def view_device(device_id):
     device = SecurityDevice.query.get_or_404(device_id)
     
@@ -951,11 +979,13 @@ def view_device(device_id):
                          errors=errors)
 
 @app.route('/events')
+@login_required
 def list_events():
     events = SecurityEvent.query.order_by(SecurityEvent.event_timestamp.desc()).all()
     return render_template('events/list.html', title='Security Events', events=events)
 
 @app.route('/devices/add', methods=['GET', 'POST'])
+@login_required
 def add_device():
     if request.method == 'POST':
         try:
@@ -1018,6 +1048,7 @@ def add_device():
                          hub=hub)    
 
 @app.route('/events/<int:event_id>')
+@login_required
 def view_event(event_id):
     event = SecurityEvent.query.get_or_404(event_id)
     return render_template('events/view.html', 
@@ -1025,6 +1056,7 @@ def view_event(event_id):
                            event=event)
 
 @app.route('/admin/keys')
+@login_required
 def manage_keys():
     """Read-only key display for customers"""
     hub = HubConfiguration.query.filter_by(is_active=True).first()
@@ -1036,6 +1068,7 @@ def manage_keys():
                          devices=devices)
 
 @app.route('/admin/emergency_key_reset', methods=['GET', 'POST'])
+@login_required
 def emergency_key_reset():
     """Emergency key reset - hidden route for support use"""
     if request.method == 'POST':
@@ -1082,6 +1115,7 @@ def emergency_key_reset():
     return render_template('admin/emergency_reset.html')   
 
 @app.route('/settings')
+@login_required
 def settings():
     """Main settings page"""
     hub = HubConfiguration.query.filter_by(is_active=True).first()
@@ -1095,6 +1129,7 @@ def settings():
                          recent_events=recent_events) 
 
 @app.route('/api/devices/status')
+@login_required
 def get_devices_status():
     """Get status from all devices"""
     try:
@@ -1105,6 +1140,7 @@ def get_devices_status():
         return {"success": False, "error": str(e)}, 500
 
 @app.route('/api/devices/<int:device_id>/camera_status')
+@login_required
 def get_device_camera_status(device_id):
     """Get camera status from specific device"""
     data, error = device_manager.make_device_request(device_id, '/camera_status')
@@ -1113,6 +1149,7 @@ def get_device_camera_status(device_id):
     return {"success": True, "data": data}
 
 @app.route('/api/devices/<int:device_id>/switch_status')
+@login_required
 def get_device_switch_status(device_id):
     """Get switch status from specific device"""
     data, error = device_manager.make_device_request(device_id, '/switch_status')
@@ -1121,6 +1158,7 @@ def get_device_switch_status(device_id):
     return {"success": True, "data": data}
 
 @app.route('/api/devices/<int:device_id>/usb_status')
+@login_required
 def get_device_usb_status(device_id):
     """Get USB status from specific device"""
     data, error = device_manager.make_device_request(device_id, '/usb_status')
@@ -1129,6 +1167,7 @@ def get_device_usb_status(device_id):
     return {"success": True, "data": data}
 
 @app.route('/api/devices/<int:device_id>/test_connection')
+@login_required
 def test_device_connection(device_id):
     """Test connection to a specific device"""
     success, message = device_manager.test_device_connection(device_id)
@@ -1140,6 +1179,7 @@ def test_device_connection(device_id):
     }
 
 @app.route('/api/devices/test_all_connections')
+@login_required
 def test_all_device_connections():
     """Test authentication with all devices"""
     devices = SecurityDevice.query.filter_by(is_active=True).all()
@@ -1159,6 +1199,7 @@ def test_all_device_connections():
     return {"success": True, "results": results}
 
 @app.route('/devices/<int:device_id>/live_status')
+@login_required
 def device_live_status(device_id):
     """Get live status for a specific device (for device detail page)"""
     device = SecurityDevice.query.get_or_404(device_id)
@@ -1189,6 +1230,7 @@ def device_live_status(device_id):
                          })
 
 @app.route('/devices/<int:device_id>/send_registration_key', methods=['POST'])
+@login_required
 def send_registration_key_to_device(device_id):
     """Send registration key to device for auto-configuration"""
     device = SecurityDevice.query.get_or_404(device_id)
@@ -1220,6 +1262,7 @@ def send_registration_key_to_device(device_id):
     return redirect(url_for('view_device', device_id=device_id)) 
 
 @app.route('/api/devices/<int:device_id>/log_access', methods=['POST'])
+@login_required
 def log_device_access(device_id):
     """Log when someone accesses a device remotely"""
     try:
@@ -1245,6 +1288,7 @@ def log_device_access(device_id):
         return jsonify({'success': False, 'error': str(e)})   
 
 @app.route('/devices/<int:device_id>/edit')
+@login_required
 def edit_device(device_id):
     """Show edit form for a specific device"""
     device = db.session.get(SecurityDevice, device_id)
@@ -1257,6 +1301,7 @@ def edit_device(device_id):
                          device=device)
 
 @app.route('/devices/<int:device_id>/update', methods=['POST'])
+@login_required
 def update_device(device_id):
     """Update device information"""
     device = db.session.get(SecurityDevice, device_id)
@@ -1334,7 +1379,9 @@ def get_version():
         })       
 
 @app.route('/map')
+@login_required
 def interactive_map():
+    print("INSIDE INTERACTIVE_MAP FUNCTION")
     """Interactive map showing all device locations"""
     # Get all devices with their locations
     devices_with_locations = db.session.query(SecurityDevice, DeviceLocation)\
@@ -1368,7 +1415,11 @@ def interactive_map():
                          title='Device Map',
                          devices=map_devices)
 
+print(f"DEBUG: Map route function name: {interactive_map.__name__}")
+print(f"DEBUG: Map route is wrapped: {hasattr(interactive_map, '__wrapped__')}")
+
 @app.route('/api/devices/<int:device_id>/connection_info')
+@login_required
 def get_device_connection_info(device_id):
     """Get connection information for a device (tunnel vs direct IP)"""
     device = db.session.get(SecurityDevice, device_id)
@@ -1388,8 +1439,10 @@ def get_device_connection_info(device_id):
         'has_direct_ip': bool(device.ip_address)
     })
 
+
 @app.route('/proxy/<int:device_id>/', methods=['GET', 'POST'])
 @app.route('/proxy/<int:device_id>/<path:path>', methods=['GET', 'POST'])
+@login_required
 def proxy_device(device_id, path=''):
     """Enhanced proxy with complete HTML rewriting"""
 
@@ -1580,6 +1633,7 @@ def proxy_device(device_id, path=''):
     return response.content, response.status_code, dict(response.headers)
 
 @app.route('/api/logs')
+@login_required
 def redirect_logs_to_proxy():
     """Catch logs requests that didn't get proxied and redirect them"""
     # Get the referer to figure out which device this came from
@@ -1605,6 +1659,7 @@ def redirect_logs_to_proxy():
     return jsonify({'error': 'No device context found'}), 404
 
 @app.route('/api/devices/<int:device_id>/ping')
+@login_required
 def ping_device_api(device_id):
     """Test device connectivity via tunnel or direct IP"""
     device = db.session.get(SecurityDevice, device_id)
@@ -1756,6 +1811,7 @@ def ping_device_api(device_id):
         })
 
 @app.route('/api/devices/<int:device_id>/approve', methods=['POST'])
+@login_required
 def approve_device(device_id):
     """Approve a pending device and allow configuration"""
     device = db.session.get(SecurityDevice, device_id)
@@ -1824,6 +1880,7 @@ def approve_device(device_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/devices/<int:device_id>/reject', methods=['POST'])
+@login_required
 def reject_device(device_id):
     """Reject a pending device and remove it"""
     device = db.session.get(SecurityDevice, device_id)
@@ -1866,6 +1923,7 @@ def reject_device(device_id):
                          devices=map_devices)        
 
 @app.route('/debug/devices')
+@login_required
 def debug_devices():
     """Debug route to see all devices and their statuses"""
     devices = SecurityDevice.query.filter_by(is_active=True).all()
@@ -1886,6 +1944,7 @@ def debug_devices():
     return {'devices': debug_info, 'count': len(devices)} 
 
 @app.route('/api/devices/<int:device_id>/delete', methods=['POST'])
+@login_required
 def delete_device(device_id):
     """Delete a device completely"""
     device = db.session.get(SecurityDevice, device_id)
@@ -1941,6 +2000,7 @@ def login():
             session['customer_id'] = user.customer_id
             session['username'] = user.username
             session['role'] = user.role
+            session['last_activity'] = datetime.utcnow().isoformat()
             
             # Update last login
             user.last_login = datetime.utcnow()
@@ -1962,6 +2022,7 @@ def logout():
     return redirect(url_for('login'))
 
 @app.route('/recordings')
+@login_required
 def recordings():
     """Video recordings management page"""
     # Check if user is logged in as a customer
@@ -1980,6 +2041,7 @@ def recordings():
                              is_customer_view=False)
 
 @app.route('/api/devices/<int:device_id>/download_videos', methods=['POST'])
+@login_required
 def download_device_videos(device_id):
     """Download videos from a specific device with customer isolation"""
     device = db.session.get(SecurityDevice, device_id)
@@ -2078,6 +2140,7 @@ def download_device_videos(device_id):
     })
 
 @app.route('/thumbnails/<path:filename>')
+@login_required
 def serve_thumbnail(filename):
     import os
     """Serve thumbnail images with customer isolation"""
@@ -2110,6 +2173,7 @@ def serve_thumbnail(filename):
         return f"Error serving thumbnail: {str(e)}", 500
 
 @app.route('/api/recordings')
+@login_required
 def list_recordings():
     import os
     """Get downloaded videos with customer isolation"""
@@ -2138,6 +2202,7 @@ def list_recordings():
     return jsonify(videos)
 
 @app.route('/api/recordings/download/<filename>')
+@login_required
 def download_recording(filename):
     """Download a specific recording with customer isolation"""
     # Check if user is logged in as a customer
@@ -2155,6 +2220,7 @@ def download_recording(filename):
     return send_from_directory(video_dir, filename, as_attachment=True)
 
 @app.route('/api/recordings/download/<filename>')
+@login_required
 def download_hub_recording(filename):
     """Download a specific recording with customer isolation"""
     # Check if user is logged in as a customer
@@ -2433,8 +2499,15 @@ def setup_ssl_context():
         logger.error(f"❌ Error setting up SSL context: {e}")
         return None
 
+# Add at the very end, just before if __name__ == '__main__':
+@app.route('/final_test')
+def final_test():
+    if 'customer_id' not in session:
+        return "NOT LOGGED IN"
+    return "LOGGED IN"
+
 # Run the application
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(host='0.0.0.0', port=7700, debug=True)
+    app.run(host='0.0.0.0', port=7700, debug=False)
