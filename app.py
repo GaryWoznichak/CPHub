@@ -2021,6 +2021,40 @@ def logout():
     flash(f'Goodbye, {username}!', 'info')
     return redirect(url_for('login'))
 
+@app.route('/account/change_password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    if request.method == 'POST':
+        current_password = request.form.get('current_password')
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
+        
+        # Get current user
+        user = CustomerUser.query.get(session['user_id'])
+        
+        # Verify current password
+        if not check_password_hash(user.password_hash, current_password):
+            flash('Current password is incorrect', 'error')
+            return render_template('account/change_password.html')
+        
+        # Validate new password
+        if new_password != confirm_password:
+            flash('New passwords do not match', 'error')
+            return render_template('account/change_password.html')
+        
+        if len(new_password) < 8:
+            flash('Password must be at least 8 characters long', 'error')
+            return render_template('account/change_password.html')
+        
+        # Update password
+        user.password_hash = generate_password_hash(new_password)
+        db.session.commit()
+        
+        flash('Password changed successfully', 'success')
+        return redirect(url_for('home'))
+    
+    return render_template('account/change_password.html')
+
 @app.route('/recordings')
 @login_required
 def recordings():
