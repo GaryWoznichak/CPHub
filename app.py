@@ -18,6 +18,8 @@ from functools import wraps
 from datetime import timedelta
 from dotenv import load_dotenv
 
+#this is a test of the updates
+
 def login_required(f):
     print(f"DECORATOR APPLIED: Wrapping {f.__name__}")
     def decorated_function(*args, **kwargs):
