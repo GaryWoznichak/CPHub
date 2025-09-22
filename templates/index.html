@@ -11,12 +11,6 @@
                 <span class="isolation-badge"><i class="fas fa-lock"></i> Secure Isolation Active</span>
             </div>
         </div>
-        <div class="customer-actions">
-            <span class="user-welcome">Welcome, {{ session.username }} ({{ session.role }})</span>
-            <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm">
-                <i class="fas fa-sign-out-alt"></i> Logout
-            </a>
-        </div>
         {% else %}
         <!-- System Admin View Header -->
         <h1>Dashboard</h1>

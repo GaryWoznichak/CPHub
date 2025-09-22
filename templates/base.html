@@ -1,19 +1,27 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>{{ title }}</title>
+    <title>CyberPhysical Hub</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
     <header>
         <div class="header-container">
             <div class="logo-container">
-            <a href="{{ url_for('home') }}">
-                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="PacketViper Logo" class="logo">
-            </a>
+                <a href="{{ url_for('home') }}">
+                    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="PacketViper Logo" class="logo">
+                </a>
             </div>
             <div class="header-content">
-                <h1>CyberPhysical Security Hub</h1>
+                <div class="header-top">
+                    <h1>CyberPhysical Security Hub</h1>
+                    {% if session.username %}
+                    <div class="user-section">
+                        <div class="user-welcome">Welcome, {{ session.username }} ({{ session.role }})</div>
+                        <a href="{{ url_for('logout') }}" class="logout-link">Logout</a>
+                    </div>
+                    {% endif %}
+                </div>
                 <nav>
                     <ul>
                         <li><a href="{{ url_for('home') }}">Home</a></li>
@@ -22,6 +30,7 @@
                         <li><a href="{{ url_for('interactive_map') }}">Map</a></li>
                         <li><a href="{{ url_for('list_events') }}">Events</a></li>
                         <li><a href="{{ url_for('settings') }}">Settings</a></li>
+                    </ul>
                 </nav>
             </div>
         </div>
