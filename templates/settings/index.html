@@ -49,10 +49,6 @@
                                 <span class="value" id="current-commit">Loading...</span>
                             </div>
                             <div class="status-row">
-                                <span class="label">Branch:</span>
-                                <span class="value" id="current-branch">Loading...</span>
-                            </div>
-                            <div class="status-row">
                                 <span class="label">Last Check:</span>
                                 <span class="value" id="last-check">Never</span>
                             </div>
@@ -303,18 +299,24 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    document.getElementById('current-commit').textContent = data.current_commit;
-                    document.getElementById('current-branch').textContent = data.current_branch;
+                    const commitElement = document.getElementById('current-commit');
+                    if (commitElement) {
+                        commitElement.textContent = data.current_commit;
+                    }
                     updateStatusCache = data;
                 } else {
-                    document.getElementById('current-commit').textContent = 'Git not available';
-                    document.getElementById('current-branch').textContent = 'N/A';
+                    const commitElement = document.getElementById('current-commit');
+                    if (commitElement) {
+                        commitElement.textContent = 'Git not available';
+                    }
                 }
             })
             .catch(error => {
                 console.error('Error loading update status:', error);
-                document.getElementById('current-commit').textContent = 'Error';
-                document.getElementById('current-branch').textContent = 'Error';
+                const commitElement = document.getElementById('current-commit');
+                if (commitElement) {
+                    commitElement.textContent = 'Error';
+                }
             });
     }
     
