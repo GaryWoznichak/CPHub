@@ -5,113 +5,134 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }} - CyberPhysical Security Hub</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        body {
-            margin: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .login-container {
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            overflow: hidden;
-            width: 400px;
-            max-width: 90vw;
-        }
-        
-        .login-header {
-            background: #3498db;
-            color: white;
-            padding: 30px 20px;
-            text-align: center;
-        }
-        
-        .login-header h1 {
-            margin: 0;
-            font-size: 1.5em;
-        }
-        
-        .login-form {
-            padding: 30px;
-        }
-        
-        .form-group {
-            margin-bottom: 20px;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            color: #2c3e50;
-            font-weight: 500;
-        }
-        
-        .form-group input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #ecf0f1;
-            border-radius: 5px;
-            font-size: 16px;
-            transition: border-color 0.3s;
-        }
-        
-        .form-group input:focus {
-            outline: none;
-            border-color: #3498db;
-        }
-        
-        .login-btn {
-            width: 100%;
-            padding: 12px;
-            background: #3498db;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-        
-        .login-btn:hover {
-            background: #2980b9;
-        }
-        
-        .alert {
-            padding: 10px;
-            margin-bottom: 20px;
-            border-radius: 5px;
-        }
-        
-        .alert-error {
-            background: #e74c3c;
-            color: white;
-        }
-        
-        .test-credentials {
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
-            padding: 15px;
-            margin-top: 20px;
-            font-size: 14px;
-        }
-        
-        .test-credentials h4 {
-            margin: 0 0 10px 0;
-            color: #495057;
-        }
-    </style>
+        <style>
+            body {
+                margin: 0;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background: #1e2024;
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            .login-container {
+                background: #34495e;
+                border-radius: 10px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+                overflow: hidden;
+                width: 400px;
+                max-width: 90vw;
+                border: 1px solid #2c3e50;
+            }
+            
+            .login-header {
+                background: #2c3e50;
+                color: white;
+                padding: 30px 20px;
+                text-align: center;
+                border-bottom: 1px solid #34495e;
+            }
+            
+            .login-header h1 {
+                margin: 0;
+                font-size: 1.5em;
+                color: #ecf0f1;
+            }
+            
+            .login-header p {
+                margin: 8px 0 0 0;
+                color: #bdc3c7;
+                font-size: 0.9em;
+            }
+
+            .login-logo {
+                height: 50px;
+                max-width: 200px;
+                margin-bottom: 15px;
+                display: block;
+                margin-left: auto;
+                margin-right: auto;
+            }
+            
+            .login-form {
+                padding: 30px;
+            }
+            
+            .form-group {
+                margin-bottom: 20px;
+            }
+            
+            .form-group label {
+                display: block;
+                margin-bottom: 5px;
+                color: #bdc3c7;
+                font-weight: 500;
+            }
+            
+            .form-group input {
+                width: 100%;
+                padding: 12px;
+                border: 1px solid #2c3e50;
+                border-radius: 5px;
+                font-size: 16px;
+                transition: border-color 0.3s;
+                background: #2c3e50;
+                color: #ecf0f1;
+            }
+            
+            .form-group input:focus {
+                outline: none;
+                border-color: #3498db;
+                box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+            }
+            
+            .login-btn {
+                width: 100%;
+                padding: 12px;
+                background: #3498db;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                font-size: 16px;
+                cursor: pointer;
+                transition: background 0.3s;
+                font-weight: 600;
+            }
+            
+            .login-btn:hover {
+                background: #2980b9;
+            }
+            
+            .alert {
+                padding: 10px;
+                margin-bottom: 20px;
+                border-radius: 5px;
+            }
+            
+            .alert-error {
+                background: rgba(231, 76, 60, 0.1);
+                border: 1px solid #e74c3c;
+                color: #e74c3c;
+            }
+            
+            .alert-success {
+                background: rgba(39, 174, 96, 0.1);
+                border: 1px solid #27ae60;
+                color: #2ecc71;
+            }
+            
+            .alert-info {
+                background: rgba(52, 152, 219, 0.1);
+                border: 1px solid #3498db;
+                color: #3498db;
+            }
+        </style>
 </head>
 <body>
     <div class="login-container">
         <div class="login-header">
-            <i class="fas fa-shield-alt"></i>
+            <img src="{{ url_for('static', filename='img/logo.png') }}" alt="PacketViper Logo" class="login-logo">
             <h1>CyberPhysical Security Hub</h1>
             <p>Customer Portal</p>
         </div>
