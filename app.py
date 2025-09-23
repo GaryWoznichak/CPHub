@@ -19,7 +19,6 @@ from datetime import timedelta
 from dotenv import load_dotenv
 
 def login_required(f):
-    print(f"DECORATOR APPLIED: Wrapping {f.__name__}")
     def decorated_function(*args, **kwargs):
         print(f"LOGIN CHECK: Checking {f.__name__}")
         
