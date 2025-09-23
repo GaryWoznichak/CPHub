@@ -2394,7 +2394,7 @@ def perform_update():
         def restart_server():
             import time
             time.sleep(5)
-            os.system('sudo systemctl restart cyberphysical-hub')  # Adjust service name as needed
+            os.system('sudo systemctl restart cpHub')  # Adjust service name as needed
         
         restart_thread = threading.Thread(target=restart_server, daemon=True)
         restart_thread.start()
