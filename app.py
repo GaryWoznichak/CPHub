@@ -2011,9 +2011,38 @@ def login():
             user.last_login = datetime.utcnow()
             db.session.commit()
             
+            # Create login event
+            try:
+                login_event = SecurityEvent(
+                    customer_id=user.customer_id,
+                    event_type='user_login',
+                    event_description=f'User {user.username} ({user.role}) logged in',
+                    severity_level='info'
+                )
+                db.session.add(login_event)
+                db.session.commit()
+                logger.info(f"Login event created for user {user.username}")
+            except Exception as e:
+                logger.error(f"Error creating login event: {e}")
+                db.session.rollback()
+            
             flash(f'Welcome back, {user.username}!', 'success')
             return redirect(url_for('home'))
         else:
+            # Failed login attempt - log it
+            try:
+                failed_login_event = SecurityEvent(
+                    event_type='failed_login',
+                    event_description=f'Failed login attempt for username: {username}',
+                    severity_level='warning'
+                )
+                db.session.add(failed_login_event)
+                db.session.commit()
+                logger.warning(f"Failed login attempt for username: {username}")
+            except Exception as e:
+                logger.error(f"Error creating failed login event: {e}")
+                db.session.rollback()
+            
             flash('Invalid username or password', 'error')
     
     return render_template('auth/login.html', title='Login')
@@ -2022,6 +2051,23 @@ def login():
 def logout():
     """Logout user"""
     username = session.get('username', 'User')
+    customer_id = session.get('customer_id')
+    
+    # Create logout event before clearing session
+    try:
+        logout_event = SecurityEvent(
+            customer_id=customer_id,
+            event_type='user_logout',
+            event_description=f'User {username} logged out',
+            severity_level='info'
+        )
+        db.session.add(logout_event)
+        db.session.commit()
+        logger.info(f"Logout event created for user {username}")
+    except Exception as e:
+        logger.error(f"Error creating logout event: {e}")
+        db.session.rollback()
+    
     session.clear()
     flash(f'Goodbye, {username}!', 'info')
     return redirect(url_for('login'))
@@ -2539,6 +2585,21 @@ def add_user():
             db.session.add(new_user)
             db.session.commit()
             
+            # Create user creation event
+            try:
+                creation_event = SecurityEvent(
+                    customer_id=customer_id,
+                    event_type='user_created',
+                    event_description=f'User {username} ({role}) created by {session.get("username")}',
+                    severity_level='info'
+                )
+                db.session.add(creation_event)
+                db.session.commit()
+                logger.info(f"User creation event logged for {username}")
+            except Exception as e:
+                logger.error(f"Error creating user creation event: {e}")
+                db.session.rollback()
+            
             flash(f'User "{username}" created successfully!', 'success')
             return redirect(url_for('manage_users'))
             
@@ -2576,8 +2637,27 @@ def delete_user(user_id):
             return jsonify({'success': False, 'error': 'Access denied'}), 403
         
         username = user.username
+        user_role = user.role
+        user_customer_id = user.customer_id
+        
+        # Delete the user
         db.session.delete(user)
         db.session.commit()
+        
+        # Create user deletion event
+        try:
+            deletion_event = SecurityEvent(
+                customer_id=user_customer_id,
+                event_type='user_deleted',
+                event_description=f'User {username} ({user_role}) deleted by {session.get("username")}',
+                severity_level='warning'
+            )
+            db.session.add(deletion_event)
+            db.session.commit()
+            logger.info(f"User deletion event logged for {username}")
+        except Exception as e:
+            logger.error(f"Error creating user deletion event: {e}")
+            db.session.rollback()
         
         return jsonify({
             'success': True,
