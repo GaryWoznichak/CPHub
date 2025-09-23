@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <div class="page-header">
+        <h2><i class="fas fa-user-plus"></i> Add New User</h2>
+        {% if customer %}
+        <div class="customer-badge">{{ customer.customer_name }}</div>
+        {% endif %}
+    </div>
+    
+    <div class="back-button-container">
+        <a href="{{ url_for('manage_users') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Users
+        </a>
+    </div>
+    
+    <div class="form-container">
+        <form method="POST" class="user-form">
+            <div class="form-section">
+                <h4><i class="fas fa-user"></i> User Information</h4>
+                
+                <div class="form-group">
+                    <label for="username">Username *</label>
+                    <input type="text" id="username" name="username" required 
+                           placeholder="Enter username" autocomplete="off">
+                    <small class="form-help">Used for login. Must be unique.</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" 
+                           placeholder="user@example.com" autocomplete="off">
+                    <small class="form-help">Optional. Used for notifications.</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password *</label>
+                    <input type="password" id="password" name="password" required 
+                           minlength="8" placeholder="Minimum 8 characters" autocomplete="new-password">
+                    <small class="form-help">Must be at least 8 characters long.</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="role">User Role *</label>
+                    <select id="role" name="role" required>
+                        <option value="viewer">Viewer - Read-only access</option>
+                        <option value="operator">Operator - Can control devices</option>
+                        <option value="admin">Admin - Full access</option>
+                    </select>
+                    <small class="form-help">Determines user permissions.</small>
+                </div>
+            </div>
+            
+            <div class="form-actions">
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-check"></i> Create User
+                </button>
+                <a href="{{ url_for('manage_users') }}" class="btn btn-secondary">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #34495e;
+}
+
+.page-header h2 {
+    color: #ecf0f1;
+    margin: 0;
+}
+
+.customer-badge {
+    background: #3498db;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    font-weight: 500;
+}
+
+.back-button-container {
+    margin-bottom: 20px;
+}
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9em;
+    font-weight: 600;
+    transition: all 0.3s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #5a6268;
+    transform: translateY(-1px);
+    color: white;
+}
+
+.btn-success {
+    background: #27ae60;
+    color: white;
+}
+
+.btn-success:hover {
+    background: #229954;
+    transform: translateY(-1px);
+}
+
+.form-container {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.user-form {
+    background: #34495e;
+    border-radius: 8px;
+    border: 1px solid #2c3e50;
+    padding: 30px;
+}
+
+.form-section {
+    margin-bottom: 30px;
+}
+
+.form-section h4 {
+    color: #ecf0f1;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #2c3e50;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    color: #bdc3c7;
+    font-weight: 600;
+    margin-bottom: 8px;
+    font-size: 0.95em;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 12px 15px;
+    background: #2c3e50;
+    border: 1px solid #34495e;
+    border-radius: 6px;
+    color: #ecf0f1;
+    font-size: 1em;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.form-help {
+    display: block;
+    color: #95a5a6;
+    font-size: 0.85em;
+    margin-top: 5px;
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    padding-top: 20px;
+    border-top: 1px solid #2c3e50;
+}
+</style>
+{% endblock %}

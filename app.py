@@ -2472,6 +2472,122 @@ def update_status():
         logger.error(f"Error getting update status: {e}")
         return jsonify({'success': False, 'error': str(e), 'git_available': False})
 
+@app.route('/admin/users')
+@login_required
+def manage_users():
+    """User management page - admin only"""
+    # Check if user is admin
+    if session.get('role') != 'admin':
+        flash('Access denied. Admin privileges required.', 'error')
+        return redirect(url_for('home'))
+    
+    # Get current customer_id if customer user
+    customer_id = session.get('customer_id')
+    
+    # Get all users for this customer
+    if customer_id:
+        users = CustomerUser.query.filter_by(customer_id=customer_id).all()
+        customer = Customer.query.get(customer_id)
+    else:
+        users = CustomerUser.query.all()
+        customer = None
+    
+    return render_template('admin/users.html', 
+                         title='User Management',
+                         users=users,
+                         customer=customer)
+
+@app.route('/admin/users/add', methods=['GET', 'POST'])
+@login_required
+def add_user():
+    """Add new user - admin only"""
+    # Check if user is admin
+    if session.get('role') != 'admin':
+        flash('Access denied. Admin privileges required.', 'error')
+        return redirect(url_for('home'))
+    
+    if request.method == 'POST':
+        try:
+            username = request.form.get('username', '').strip()
+            password = request.form.get('password', '').strip()
+            email = request.form.get('email', '').strip()
+            role = request.form.get('role', 'viewer')
+            
+            # Get customer_id from session (for customer admins)
+            customer_id = session.get('customer_id')
+            
+            # Validate input
+            if not username or not password:
+                flash('Username and password are required', 'error')
+                return redirect(url_for('add_user'))
+            
+            # Check if username already exists
+            existing_user = CustomerUser.query.filter_by(username=username).first()
+            if existing_user:
+                flash(f'Username "{username}" already exists', 'error')
+                return redirect(url_for('add_user'))
+            
+            # Create new user
+            new_user = create_customer_user(
+                customer_id=customer_id,
+                username=username,
+                password=password,
+                email=email,
+                role=role
+            )
+            
+            db.session.add(new_user)
+            db.session.commit()
+            
+            flash(f'User "{username}" created successfully!', 'success')
+            return redirect(url_for('manage_users'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error creating user: {str(e)}', 'error')
+            return redirect(url_for('add_user'))
+    
+    # GET request - show form
+    customer_id = session.get('customer_id')
+    customer = Customer.query.get(customer_id) if customer_id else None
+    
+    return render_template('admin/add_user.html', 
+                         title='Add New User',
+                         customer=customer)
+
+@app.route('/admin/users/<int:user_id>/delete', methods=['POST'])
+@login_required
+def delete_user(user_id):
+    """Delete a user - admin only"""
+    # Check if user is admin
+    if session.get('role') != 'admin':
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    
+    try:
+        user = CustomerUser.query.get_or_404(user_id)
+        
+        # Prevent deleting yourself
+        if user.user_id == session.get('user_id'):
+            return jsonify({'success': False, 'error': 'Cannot delete your own account'}), 400
+        
+        # Check if user belongs to same customer (for customer admins)
+        customer_id = session.get('customer_id')
+        if customer_id and user.customer_id != customer_id:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+        
+        username = user.username
+        db.session.delete(user)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'User "{username}" deleted successfully'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 #CP App API Routes
 @app.route('/api/mobile/devices', methods=['GET'])
 def mobile_api_devices():
