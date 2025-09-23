@@ -41,6 +41,9 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
+TUNNEL_PORT_START = int(os.getenv('TUNNEL_PORT_START', 8000))
+TUNNEL_PORT_END = int(os.getenv('TUNNEL_PORT_END', 9999))
+
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=12)  # Fallback max time
 app.config['SESSION_COOKIE_HTTPONLY'] = True  # Security
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
@@ -374,12 +377,14 @@ class TunnelDetector:
             active_tunnel_ports = set()
             
             for line in lines:
-                if ('sshd:' in line and ':800' in line) or ('device_' in line and ':800' in line):
+                if ('sshd:' in line and ':' in line) or ('device_' in line and ':' in line):
                     parts = line.split()
                     for part in parts:
-                        if ':800' in part:
+                        if ':' in part:
                             port = int(part.split(':')[-1])
-                            active_tunnel_ports.add(port)
+                            # Only add if within our assigned range
+                            if TUNNEL_PORT_START <= port <= TUNNEL_PORT_END:
+                                active_tunnel_ports.add(port)
                             logger.info(f"🎯 Detected active tunnel on port {port}")
                             self._handle_detected_tunnel(port)
             
