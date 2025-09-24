@@ -381,12 +381,14 @@ class TunnelDetector:
                     parts = line.split()
                     for part in parts:
                         if ':' in part:
-                            port = int(part.split(':')[-1])
-                            # Only add if within our assigned range
+                            try:
+                                port = int(part.split(':')[-1])
+                            except ValueError:
+                                continue
                             if TUNNEL_PORT_START <= port <= TUNNEL_PORT_END:
                                 active_tunnel_ports.add(port)
-                            logger.info(f"🎯 Detected active tunnel on port {port}")
-                            self._handle_detected_tunnel(port)
+                                logger.info(f"🎯 Detected active tunnel on port {port}")
+                                self._handle_detected_tunnel(port)
             
             # NEW CODE: Update devices with missing tunnels
             all_tunnel_devices = SecurityDevice.query.filter(SecurityDevice.tunnel_port.isnot(None)).all()
@@ -907,37 +909,16 @@ atexit.register(tunnel_detector.stop_detection)
 @app.route('/')
 @login_required
 def home():
-    # Check if user is logged in as a customer
-    if 'customer_id' in session:
-        # Customer view - filter devices by customer_id
-        customer_id = session['customer_id']
-        devices = SecurityDevice.query.filter_by(customer_id=customer_id, is_active=True).all()
-        recent_events = SecurityEvent.query.filter_by(customer_id=customer_id)\
-            .order_by(SecurityEvent.event_timestamp.desc()).limit(5).all()
-        
-        # Get customer info for display
-        customer = Customer.query.get(customer_id)
-        hub = HubConfiguration.query.filter_by(is_active=True).first()
-        
-        return render_template('index.html', 
-                               title=f'{customer.customer_name} - Security Operations Center',
-                               devices=devices,
-                               hub=hub,
-                               recent_events=recent_events,
-                               customer=customer,  # Pass customer info
-                               is_customer_view=True)  # Flag for customer view
-    else:
-        # Admin/system view - show all devices (existing behavior)
-        devices = SecurityDevice.query.filter_by(is_active=True).all()
-        hub = HubConfiguration.query.filter_by(is_active=True).first()
-        recent_events = SecurityEvent.query.order_by(SecurityEvent.event_timestamp.desc()).limit(5).all()
-        
-        return render_template('index.html', 
-                               title='Security Operations Center',
-                               devices=devices,
-                               hub=hub,
-                               recent_events=recent_events,
-                               is_customer_view=False)
+    devices = SecurityDevice.query.filter_by(is_active=True).all()
+    hub = HubConfiguration.query.filter_by(is_active=True).first()
+    recent_events = SecurityEvent.query.order_by(SecurityEvent.event_timestamp.desc()).limit(5).all()
+    
+    return render_template('index.html', 
+                         title='Security Operations Center',
+                         devices=devices,
+                         hub=hub,
+                         recent_events=recent_events,
+                         is_customer_view=False)
 
 @app.route('/devices')
 @login_required
