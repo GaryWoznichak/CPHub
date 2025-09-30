@@ -1567,6 +1567,8 @@ def proxy_device(device_id, path=''):
         content = content.replace("endpoint: '/api/logs", f"endpoint: '/proxy/{device_id}/api/logs")
         content = content.replace('apiUrl + "/logs', f'apiUrl + "/proxy/{device_id}/logs')
         content = content.replace("apiUrl + '/logs", f"apiUrl + '/proxy/{device_id}/logs")
+        content = content.replace('"/download/', f'"/proxy/{device_id}/download/')
+        content = content.replace("'/download/", f"'/proxy/{device_id}/download/")
                 
         return content, response.status_code, dict(response.headers)
 
@@ -1617,6 +1619,8 @@ def proxy_device(device_id, path=''):
         content = content.replace("endpoint: '/api/logs", f"endpoint: '/proxy/{device_id}/api/logs")
         content = content.replace('baseUrl + "/api/logs', f'baseUrl + "/proxy/{device_id}/api/logs')
         content = content.replace("baseUrl + '/api/logs", f"baseUrl + '/proxy/{device_id}/api/logs")
+        content = content.replace('href="/download/', f'href="/proxy/{device_id}/download/')
+        content = content.replace("href='/download/", f"href='/proxy/{device_id}/download/")
     
         
         return content, response.status_code, dict(response.headers)

@@ -363,26 +363,69 @@ function syncVideos() {
     button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
     button.disabled = true;
     
-    // Call the download endpoint for device 1 (and later all devices)
-    fetch('/api/devices/1/download_videos', {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert(`Downloaded ${data.downloaded_count} videos`);
-            loadVideos(); // Refresh the list
-        } else {
-            alert(`Sync failed: ${data.error}`);
-        }
-    })
-    .catch(error => {
-        alert(`Sync error: ${error.message}`);
-    })
-    .finally(() => {
-        button.innerHTML = originalText;
-        button.disabled = false;
-    });
+    // Get all devices from the debug endpoint
+    fetch('/debug/devices')
+        .then(response => response.json())
+        .then(data => {
+            const devices = data.devices;
+            
+            if (devices.length === 0) {
+                alert('No devices found to sync from');
+                button.innerHTML = originalText;
+                button.disabled = false;
+                return;
+            }
+            
+            // Sync from each device sequentially
+            let totalVideos = 0;
+            let currentDevice = 0;
+            
+            function syncNextDevice() {
+                if (currentDevice >= devices.length) {
+                    // All done
+                    button.innerHTML = originalText;
+                    button.disabled = false;
+                    alert(`✅ Sync complete!\n\nDownloaded ${totalVideos} total videos from ${devices.length} device(s)`);
+                    loadVideos(); // Refresh the video list
+                    return;
+                }
+                
+                const device = devices[currentDevice];
+                button.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Syncing ${device.name}... (${currentDevice + 1}/${devices.length})`;
+                
+                fetch(`/api/devices/${device.id}/download_videos`, {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        totalVideos += data.downloaded_count;
+                        console.log(`✅ Synced ${data.downloaded_count} videos from ${device.name}`);
+                    } else {
+                        console.error(`❌ Failed to sync from ${device.name}: ${data.error}`);
+                    }
+                    
+                    // Move to next device
+                    currentDevice++;
+                    syncNextDevice();
+                })
+                .catch(error => {
+                    console.error(`⚠️ Error syncing from ${device.name}: ${error.message}`);
+                    
+                    // Move to next device even if this one failed
+                    currentDevice++;
+                    syncNextDevice();
+                });
+            }
+            
+            // Start syncing
+            syncNextDevice();
+        })
+        .catch(error => {
+            button.innerHTML = originalText;
+            button.disabled = false;
+            alert(`⚠️ Error getting device list: ${error.message}`);
+        });
 }
 
 function refreshList() {
