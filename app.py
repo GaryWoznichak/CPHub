@@ -1596,6 +1596,10 @@ def proxy_device(device_id, path=''):
         content = content.replace("location.href='/stream_video/", f"location.href='/proxy/{device_id}/stream_video/")
         content = content.replace('openStreamPopup("/stream_video/', f'openStreamPopup("/proxy/{device_id}/stream_video/')
         content = content.replace("openStreamPopup('/stream_video/", f"openStreamPopup('/proxy/{device_id}/stream_video/")
+        content = content.replace('"/delete/', f'"/proxy/{device_id}/delete/')
+        content = content.replace("'/delete/", f"'/proxy/{device_id}/delete/")
+        content = content.replace('fetch("/delete/', f'fetch("/proxy/{device_id}/delete/')
+        content = content.replace("fetch('/delete/", f"fetch('/proxy/{device_id}/delete/")
                 
         return content, response.status_code, dict(response.headers)
 
@@ -1664,7 +1668,11 @@ def proxy_device(device_id, path=''):
         content = content.replace("location.href='/stream_video/", f"location.href='/proxy/{device_id}/stream_video/")
         content = content.replace('openStreamPopup("/stream_video/', f'openStreamPopup("/proxy/{device_id}/stream_video/')
         content = content.replace("openStreamPopup('/stream_video/", f"openStreamPopup('/proxy/{device_id}/stream_video/")
-    
+        content = content.replace('"/delete/', f'"/proxy/{device_id}/delete/')
+        content = content.replace("'/delete/", f"'/proxy/{device_id}/delete/")
+        content = content.replace('fetch("/delete/', f'fetch("/proxy/{device_id}/delete/')
+        content = content.replace("fetch('/delete/", f"fetch('/proxy/{device_id}/delete/")
+            
         
         return content, response.status_code, dict(response.headers)
    
