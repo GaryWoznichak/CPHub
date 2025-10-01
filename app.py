@@ -75,6 +75,20 @@ def initialize_hub():
         )
         db.session.add(hub)
         db.session.commit()
+    
+    # NEW: Ensure customer exists for this hub instance
+    customer = Customer.query.first()
+    if not customer:
+        customer = Customer(
+            customer_name="Customer (Edit in Settings)",
+            customer_code="CUST",
+            subscription_plan='municipal',
+            is_active=True
+        )
+        db.session.add(customer)
+        db.session.commit()
+        logger.info(f"✅ Created default customer with ID: {customer.customer_id}")
+    
     return hub
 
 def create_customer_user(customer_id, username, password, email=None, role='admin'):
@@ -2123,14 +2137,14 @@ def download_device_videos(device_id):
     if not device:
         return jsonify({'success': False, 'error': 'Device not found'}), 404
     
-    # CRITICAL: Strict customer isolation - NO defaults allowed
-    if not device.customer_id:
+    customer = Customer.query.first()
+    if not customer:
         return jsonify({
             'success': False, 
-            'error': 'Device has no customer assignment - cannot download videos'
-        }), 403
-
-    customer_id = str(device.customer_id).zfill(3)  # Format as 001, 002, etc.
+            'error': 'No customer configured for this hub - run initialization'
+        }), 500
+    
+    customer_id = str(customer.customer_id).zfill(3)  # Format as 001, 002, etc.
     
     # Create customer-specific video directory
     import os
@@ -2143,6 +2157,12 @@ def download_device_videos(device_id):
     
     # Get list of videos from device
     video_list, error = device_manager.make_device_request(device_id, '/api/videos')
+
+    logger.warning(f"🔍 DEBUG: Requesting videos from device {device_id}")
+    logger.warning(f"🔍 DEBUG: video_list = {video_list}")
+    logger.warning(f"🔍 DEBUG: error = {error}")
+    logger.warning(f"🔍 DEBUG: video_list type = {type(video_list)}")
+
     if error:
         return jsonify({'success': False, 'error': f'Failed to get video list: {error}'}), 500
     
@@ -2223,11 +2243,8 @@ def serve_thumbnail(filename):
         if ".." in filename or filename.startswith("/"):
             return "Invalid filename", 400
         
-        # Check if user is logged in as a customer
-        if 'customer_id' in session:
-            customer_id = str(session['customer_id']).zfill(3)
-        else:
-            customer_id = '001'  # Default for admin view
+        customer = Customer.query.first()
+        customer_id = str(customer.customer_id).zfill(3) if customer else '001'
         
         thumbnail_dir = f"./thumbnails/customer_{customer_id}/"
         
@@ -2252,11 +2269,9 @@ def serve_thumbnail(filename):
 def list_recordings():
     import os
     """Get downloaded videos with customer isolation"""
-    # Check if user is logged in as a customer
-    if 'customer_id' in session:
-        customer_id = str(session['customer_id']).zfill(3)
-    else:
-        customer_id = '001'  # Default for admin view
+   
+    customer = Customer.query.first()
+    customer_id = str(customer.customer_id).zfill(3) if customer else '001'
     
     video_dir = f"./videos/customer_{customer_id}/"
     videos = []
