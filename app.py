@@ -1700,6 +1700,42 @@ def redirect_stream_to_proxy(filename):
     logger.warning(f"❌ Orphaned stream_video request - no device context: {filename}")
     return jsonify({'error': 'No device context found'}), 404
 
+@app.route('/delete/<path:filename>', methods=['DELETE'])
+@login_required
+def redirect_delete_to_proxy(filename):
+    """Catch orphaned delete requests and redirect to proper proxy"""
+    # Get the referer to figure out which device this came from
+    referer = request.headers.get('Referer', '')
+    
+    if '/proxy/' in referer:
+        # Extract device_id from referer URL
+        import re
+        match = re.search(r'/proxy/(\d+)/', referer)
+        if match:
+            device_id = match.group(1)
+            
+            # Forward the DELETE request to the device through proxy
+            device = db.session.get(SecurityDevice, device_id)
+            if not device:
+                return jsonify({'error': 'Device not found'}), 404
+            
+            # Use device manager to make the delete request
+            result, error = device_manager.make_device_request(
+                device_id, 
+                f'/delete/{filename}',
+                method='DELETE'
+            )
+            
+            if error:
+                return jsonify({'error': error}), 500
+            
+            logger.info(f"✅ Successfully deleted {filename} from device {device_id}")
+            return jsonify({'message': f'Video deleted successfully'}), 200
+    
+    # If we can't figure out the device, return an error
+    logger.warning(f"❌ Orphaned delete request - no device context: {filename}")
+    return jsonify({'error': 'No device context found'}), 404
+
 @app.route('/api/logs')
 @login_required
 def redirect_logs_to_proxy():
