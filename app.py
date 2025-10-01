@@ -2409,7 +2409,7 @@ def perform_update():
         rollback_hash = current_commit.stdout.strip()
         
         # Pull the latest changes
-        pull_result = subprocess.run(['git', 'pull', 'origin'], 
+        pull_result = subprocess.run(['git', 'pull', 'origin', 'main'],
                                    capture_output=True, text=True, cwd='.')
         
         if pull_result.returncode != 0:
