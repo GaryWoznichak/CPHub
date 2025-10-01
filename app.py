@@ -1583,6 +1583,19 @@ def proxy_device(device_id, path=''):
         content = content.replace("apiUrl + '/logs", f"apiUrl + '/proxy/{device_id}/logs")
         content = content.replace('"/download/', f'"/proxy/{device_id}/download/')
         content = content.replace("'/download/", f"'/proxy/{device_id}/download/")
+        # Fix video streaming - be more aggressive with ALL variations
+        content = content.replace('"/stream_video/', f'"/proxy/{device_id}/stream_video/')
+        content = content.replace("'/stream_video/", f"'/proxy/{device_id}/stream_video/")
+        content = content.replace('href="/stream_video/', f'href="/proxy/{device_id}/stream_video/')
+        content = content.replace("href='/stream_video/", f"href='/proxy/{device_id}/stream_video/")
+        content = content.replace('src="/stream_video/', f'src="/proxy/{device_id}/stream_video/')
+        content = content.replace("src='/stream_video/", f"src='/proxy/{device_id}/stream_video/")
+        content = content.replace('window.open("/stream_video/', f'window.open("/proxy/{device_id}/stream_video/')
+        content = content.replace("window.open('/stream_video/", f"window.open('/proxy/{device_id}/stream_video/")
+        content = content.replace('location.href="/stream_video/', f'location.href="/proxy/{device_id}/stream_video/')
+        content = content.replace("location.href='/stream_video/", f"location.href='/proxy/{device_id}/stream_video/")
+        content = content.replace('openStreamPopup("/stream_video/', f'openStreamPopup("/proxy/{device_id}/stream_video/')
+        content = content.replace("openStreamPopup('/stream_video/", f"openStreamPopup('/proxy/{device_id}/stream_video/")
                 
         return content, response.status_code, dict(response.headers)
 
@@ -1638,6 +1651,19 @@ def proxy_device(device_id, path=''):
         content = content.replace("openStreamPopup('/stream_video/", f"openStreamPopup('/proxy/{device_id}/stream_video/")
         content = content.replace('window.open("/stream_video/', f'window.open("/proxy/{device_id}/stream_video/')
         content = content.replace("window.open('/stream_video/", f"window.open('/proxy/{device_id}/stream_video/")
+        # Fix video streaming - be more aggressive with ALL variations
+        content = content.replace('"/stream_video/', f'"/proxy/{device_id}/stream_video/')
+        content = content.replace("'/stream_video/", f"'/proxy/{device_id}/stream_video/")
+        content = content.replace('href="/stream_video/', f'href="/proxy/{device_id}/stream_video/')
+        content = content.replace("href='/stream_video/", f"href='/proxy/{device_id}/stream_video/")
+        content = content.replace('src="/stream_video/', f'src="/proxy/{device_id}/stream_video/')
+        content = content.replace("src='/stream_video/", f"src='/proxy/{device_id}/stream_video/")
+        content = content.replace('window.open("/stream_video/', f'window.open("/proxy/{device_id}/stream_video/')
+        content = content.replace("window.open('/stream_video/", f"window.open('/proxy/{device_id}/stream_video/")
+        content = content.replace('location.href="/stream_video/', f'location.href="/proxy/{device_id}/stream_video/')
+        content = content.replace("location.href='/stream_video/", f"location.href='/proxy/{device_id}/stream_video/")
+        content = content.replace('openStreamPopup("/stream_video/', f'openStreamPopup("/proxy/{device_id}/stream_video/')
+        content = content.replace("openStreamPopup('/stream_video/", f"openStreamPopup('/proxy/{device_id}/stream_video/")
     
         
         return content, response.status_code, dict(response.headers)
