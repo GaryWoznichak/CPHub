@@ -1635,6 +1635,9 @@ def proxy_device(device_id, path=''):
         content = content.replace("baseUrl + '/api/logs", f"baseUrl + '/proxy/{device_id}/api/logs")
         content = content.replace('href="/download/', f'href="/proxy/{device_id}/download/')
         content = content.replace("href='/download/", f"href='/proxy/{device_id}/download/")
+        content = content.replace("openStreamPopup('/stream_video/", f"openStreamPopup('/proxy/{device_id}/stream_video/")
+        content = content.replace('window.open("/stream_video/', f'window.open("/proxy/{device_id}/stream_video/')
+        content = content.replace("window.open('/stream_video/", f"window.open('/proxy/{device_id}/stream_video/")
     
         
         return content, response.status_code, dict(response.headers)
