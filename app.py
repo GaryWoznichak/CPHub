@@ -1670,6 +1670,28 @@ def proxy_device(device_id, path=''):
    
     return response.content, response.status_code, dict(response.headers)
 
+@app.route('/stream_video/<path:filename>')
+@login_required
+def redirect_stream_to_proxy(filename):
+    """Catch orphaned stream_video requests and redirect to proper proxy"""
+    # Get the referer to figure out which device this came from
+    referer = request.headers.get('Referer', '')
+    
+    if '/proxy/' in referer:
+        # Extract device_id from referer URL
+        import re
+        match = re.search(r'/proxy/(\d+)/', referer)
+        if match:
+            device_id = match.group(1)
+            proxy_url = f"/proxy/{device_id}/stream_video/{filename}"
+            
+            logger.info(f"🔄 Redirecting orphaned stream_video to: {proxy_url}")
+            return redirect(proxy_url)
+    
+    # If we can't figure out the device, return an error
+    logger.warning(f"❌ Orphaned stream_video request - no device context: {filename}")
+    return jsonify({'error': 'No device context found'}), 404
+
 @app.route('/api/logs')
 @login_required
 def redirect_logs_to_proxy():
