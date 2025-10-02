@@ -3002,7 +3002,7 @@ def get_device_recording_status(device_id):
 @app.route('/api/devices/restart_all', methods=['POST'])
 @login_required
 def restart_all_devices():
-    """Restart all connected CyberPhysical devices"""
+    """Restart all connected CyberPhysical devices via systemd service restart"""
     try:
         devices = SecurityDevice.query.filter_by(is_active=True).all()
         
@@ -3019,12 +3019,13 @@ def restart_all_devices():
             # Only attempt restart if device is connected
             if device.connection_status == 'connected' or device.tunnel_status == 'connected':
                 try:
-                    # Send restart command to device
+                    # Send systemd service restart command to device
                     result, error = device_manager.make_device_request(
                         device.device_id, 
-                        '/api/system/restart',
+                        '/api/system/restart_service',  # Changed endpoint
                         method='POST',
-                        timeout=5  # Short timeout since device will restart
+                        data={'service_name': 'cpmotion'},  # Specify the service
+                        timeout=10  # Longer timeout for systemd operations
                     )
                     
                     if error:
@@ -3038,16 +3039,20 @@ def restart_all_devices():
                         restart_results[device.device_id] = {
                             'device_name': device.device_name,
                             'success': True,
-                            'message': 'Restart command sent successfully',
+                            'message': 'Service restart command sent successfully',
                             'status': 'restarting'
                         }
                         successful_restarts += 1
                         
+                        # Mark device as restarting - it will be offline temporarily
+                        device.connection_status = 'restarting'
+                        device.last_seen = datetime.utcnow()
+                        
                         # Log the restart event
                         restart_event = SecurityEvent(
                             device_id=device.device_id,
-                            event_type='device_restart',
-                            event_description=f'Device {device.device_name} restart initiated by {session.get("username")}',
+                            event_type='device_service_restart',
+                            event_description=f'Device {device.device_name} systemd service restart initiated by {session.get("username")}',
                             severity_level='info'
                         )
                         db.session.add(restart_event)
@@ -3067,20 +3072,21 @@ def restart_all_devices():
                     'status': 'offline'
                 }
         
-        # Commit all restart events
+        # Commit all restart events and status changes
         db.session.commit()
         
         return jsonify({
             'success': True,
-            'message': f'Restart initiated for {successful_restarts} of {len(devices)} devices',
+            'message': f'Systemd service restart initiated for {successful_restarts} of {len(devices)} devices',
             'total_devices': len(devices),
             'successful_restarts': successful_restarts,
-            'results': restart_results
+            'results': restart_results,
+            'restart_type': 'systemd_service'
         })
         
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error restarting devices: {e}")
+        logger.error(f"Error restarting device services: {e}")
         return jsonify({
             'success': False,
             'error': str(e)

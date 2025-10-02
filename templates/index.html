@@ -1136,11 +1136,13 @@ function showApprovalModal(deviceId, currentName) {
 }
 
 function restartAllDevices() {
-    // Show confirmation dialog with warning
+    // Show confirmation dialog with systemd-specific warning
     const confirmRestart = confirm(
-        '⚠️ RESTART ALL DEVICES?\n\n' +
-        'This will restart ALL connected CyberPhysical devices.\n\n' +
-        'Devices will be offline for 30-60 seconds during restart.\n\n' +
+        '⚠️ RESTART ALL DEVICE SERVICES?\n\n' +
+        'This will restart the systemd cpmotion service on ALL connected devices.\n\n' +
+        '• Devices will be completely offline for 60-90 seconds\n' +
+        '• All video recordings in progress will stop\n' +
+        '• Services will automatically restart\n\n' +
         'Are you sure you want to continue?'
     );
     
@@ -1150,10 +1152,10 @@ function restartAllDevices() {
     const originalContent = button.innerHTML;
     
     // Show loading state
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>Restarting...';
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>Restarting Services...';
     button.style.pointerEvents = 'none'; // Disable button
     
-    console.log('🔄 Initiating restart for all devices...');
+    console.log('🔄 Initiating systemd service restart for all devices...');
     
     fetch('/api/devices/restart_all', {
         method: 'POST',
@@ -1164,9 +1166,9 @@ function restartAllDevices() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Show success with details
-            let message = `✅ Restart Initiated!\n\n`;
-            message += `${data.successful_restarts} of ${data.total_devices} devices restarting\n\n`;
+            // Show success with systemd-specific details
+            let message = `✅ Service Restart Initiated!\n\n`;
+            message += `${data.successful_restarts} of ${data.total_devices} device services restarting\n\n`;
             
             // Add device-specific results
             Object.values(data.results).forEach(result => {
@@ -1174,21 +1176,22 @@ function restartAllDevices() {
                 message += `${status} ${result.device_name}: ${result.status}\n`;
             });
             
-            message += `\n💡 Devices will be back online in 30-60 seconds`;
+            message += `\n💡 Services restarting - devices offline for 60-90 seconds`;
+            message += `\n🔄 New PID will be assigned to each service`;
             alert(message);
             
             // Show success state on button temporarily
-            button.innerHTML = '<i class="fas fa-check"></i>Restart Sent';
+            button.innerHTML = '<i class="fas fa-check"></i>Services Restarting';
             button.style.backgroundColor = '#27ae60';
             
-            // Schedule dashboard refresh to show updated device statuses
+            // Schedule dashboard refresh after longer delay for systemd restart
             setTimeout(() => {
-                console.log('🔄 Refreshing dashboard to show restarted devices...');
+                console.log('🔄 Refreshing dashboard to show restarted services...');
                 window.location.reload();
-            }, 3000);
+            }, 5000); // Longer delay for systemd restart
             
         } else {
-            alert(`❌ Restart failed: ${data.error}`);
+            alert(`❌ Service restart failed: ${data.error}`);
             
             // Show error state
             button.innerHTML = '<i class="fas fa-exclamation-triangle"></i>Failed';
@@ -1203,7 +1206,7 @@ function restartAllDevices() {
         }
     })
     .catch(error => {
-        console.error('Restart error:', error);
+        console.error('Service restart error:', error);
         alert(`⚠️ Network error: ${error.message}`);
         
         // Restore button
