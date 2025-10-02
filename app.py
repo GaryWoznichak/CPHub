@@ -3002,7 +3002,7 @@ def get_device_recording_status(device_id):
 @app.route('/api/devices/restart_all', methods=['POST'])
 @login_required
 def restart_all_devices():
-    """Restart all connected CyberPhysical devices by executing SSH command through tunnel"""
+    """Restart all connected CyberPhysical devices via HTTP endpoint"""
     try:
         devices = SecurityDevice.query.filter_by(is_active=True).all()
         
@@ -3016,46 +3016,40 @@ def restart_all_devices():
         successful_restarts = 0
         
         for device in devices:
-            # Only attempt restart if device has a tunnel
-            if device.tunnel_port and device.tunnel_status == 'connected':
+            if device.connection_status == 'connected' or device.tunnel_status == 'connected':
                 try:
-                    import subprocess
-                    
-                    # Use netcat through the tunnel to execute the command
-                    ssh_command = [
-                        'bash', '-c',
-                        f'echo "/var/docker-build/restart-cpmotion.sh" | nc localhost {device.tunnel_port}'
-                    ]
-                    
-                    result = subprocess.run(
-                        ssh_command,
-                        capture_output=True,
-                        text=True,
-                        timeout=5
+                    # Use the HTTP endpoint through your existing device_manager
+                    result, error = device_manager.make_device_request(
+                        device.device_id, 
+                        '/api/restart',
+                        method='POST',
+                        timeout=3  # Short timeout since it runs in background
                     )
                     
-                    # For restart commands, we don't expect a response since the device will restart
-                    restart_results[device.device_id] = {
-                        'device_name': device.device_name,
-                        'success': True,
-                        'message': 'Restart command sent through tunnel',
-                        'status': 'restarting',
-                        'method': 'netcat_tunnel'
-                    }
-                    successful_restarts += 1
-                    
-                    # Mark device as restarting
-                    device.connection_status = 'restarting'
-                    device.last_seen = datetime.utcnow()
-                    
-                    # Log the restart event
-                    restart_event = SecurityEvent(
-                        device_id=device.device_id,
-                        event_type='device_restart_tunnel',
-                        event_description=f'Device {device.device_name} restart command sent via tunnel by {session.get("username")}',
-                        severity_level='info'
-                    )
-                    db.session.add(restart_event)
+                    if error:
+                        restart_results[device.device_id] = {
+                            'device_name': device.device_name,
+                            'success': False,
+                            'error': error,
+                            'status': 'failed'
+                        }
+                    else:
+                        restart_results[device.device_id] = {
+                            'device_name': device.device_name,
+                            'success': True,
+                            'message': 'Restart command sent',
+                            'status': 'restarting'
+                        }
+                        successful_restarts += 1
+                        
+                        # Log the restart event
+                        restart_event = SecurityEvent(
+                            device_id=device.device_id,
+                            event_type='device_restart',
+                            event_description=f'Device {device.device_name} restart via HTTP by {session.get("username")}',
+                            severity_level='info'
+                        )
+                        db.session.add(restart_event)
                         
                 except Exception as e:
                     restart_results[device.device_id] = {
@@ -3068,25 +3062,23 @@ def restart_all_devices():
                 restart_results[device.device_id] = {
                     'device_name': device.device_name,
                     'success': False,
-                    'error': 'No tunnel connection available',
-                    'status': 'no_tunnel'
+                    'error': 'Device not connected',
+                    'status': 'offline'
                 }
         
-        # Commit all events
         db.session.commit()
         
         return jsonify({
             'success': True,
-            'message': f'Restart commands sent to {successful_restarts} of {len(devices)} devices',
+            'message': f'Restart initiated for {successful_restarts} of {len(devices)} devices',
             'total_devices': len(devices),
             'successful_restarts': successful_restarts,
-            'results': restart_results,
-            'restart_method': 'tunnel_netcat'
+            'results': restart_results
         })
         
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error restarting devices via tunnel: {e}")
+        logger.error(f"Error restarting devices: {e}")
         return jsonify({
             'success': False,
             'error': str(e)
