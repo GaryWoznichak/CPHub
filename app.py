@@ -2999,6 +2999,93 @@ def get_device_recording_status(device_id):
             'is_recording': False
         }), 500
 
+@app.route('/api/devices/restart_all', methods=['POST'])
+@login_required
+def restart_all_devices():
+    """Restart all connected CyberPhysical devices"""
+    try:
+        devices = SecurityDevice.query.filter_by(is_active=True).all()
+        
+        if not devices:
+            return jsonify({
+                'success': False,
+                'error': 'No active devices found'
+            }), 404
+        
+        restart_results = {}
+        successful_restarts = 0
+        
+        for device in devices:
+            # Only attempt restart if device is connected
+            if device.connection_status == 'connected' or device.tunnel_status == 'connected':
+                try:
+                    # Send restart command to device
+                    result, error = device_manager.make_device_request(
+                        device.device_id, 
+                        '/api/system/restart',
+                        method='POST',
+                        timeout=5  # Short timeout since device will restart
+                    )
+                    
+                    if error:
+                        restart_results[device.device_id] = {
+                            'device_name': device.device_name,
+                            'success': False,
+                            'error': error,
+                            'status': 'failed'
+                        }
+                    else:
+                        restart_results[device.device_id] = {
+                            'device_name': device.device_name,
+                            'success': True,
+                            'message': 'Restart command sent successfully',
+                            'status': 'restarting'
+                        }
+                        successful_restarts += 1
+                        
+                        # Log the restart event
+                        restart_event = SecurityEvent(
+                            device_id=device.device_id,
+                            event_type='device_restart',
+                            event_description=f'Device {device.device_name} restart initiated by {session.get("username")}',
+                            severity_level='info'
+                        )
+                        db.session.add(restart_event)
+                        
+                except Exception as e:
+                    restart_results[device.device_id] = {
+                        'device_name': device.device_name,
+                        'success': False,
+                        'error': str(e),
+                        'status': 'error'
+                    }
+            else:
+                restart_results[device.device_id] = {
+                    'device_name': device.device_name,
+                    'success': False,
+                    'error': 'Device not connected',
+                    'status': 'offline'
+                }
+        
+        # Commit all restart events
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Restart initiated for {successful_restarts} of {len(devices)} devices',
+            'total_devices': len(devices),
+            'successful_restarts': successful_restarts,
+            'results': restart_results
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error restarting devices: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 def setup_ssl_context():
     """Setup SSL context for HTTPS"""
     ssl_dir = "ssl"
