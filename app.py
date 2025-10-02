@@ -3002,7 +3002,7 @@ def get_device_recording_status(device_id):
 @app.route('/api/devices/restart_all', methods=['POST'])
 @login_required
 def restart_all_devices():
-    """Restart all connected CyberPhysical devices via their existing restart endpoint"""
+    """Restart all connected CyberPhysical devices via direct SSH command execution"""
     try:
         devices = SecurityDevice.query.filter_by(is_active=True).all()
         
@@ -3016,45 +3016,56 @@ def restart_all_devices():
         successful_restarts = 0
         
         for device in devices:
-            # Only attempt restart if device is connected
-            if device.connection_status == 'connected' or device.tunnel_status == 'connected':
+            # Only attempt restart if device has a tunnel (SSH connection)
+            if device.tunnel_port and device.tunnel_status == 'connected':
                 try:
-                    # Use the existing /api/restart endpoint that calls restart-cpmotion.sh
-                    result, error = device_manager.make_device_request(
-                        device.device_id, 
-                        '/api/restart',  # Changed back to existing endpoint
-                        method='POST',
-                        timeout=5  # Short timeout since script runs in background
+                    import subprocess
+                    
+                    # Execute the restart script directly via SSH tunnel
+                    ssh_command = [
+                        'ssh',
+                        '-p', str(device.tunnel_port),
+                        '-o', 'StrictHostKeyChecking=no',
+                        '-o', 'ConnectTimeout=5',
+                        'localhost',  # Through the tunnel
+                        '/var/docker-build/restart-cpmotion.sh'
+                    ]
+                    
+                    result = subprocess.run(
+                        ssh_command,
+                        capture_output=True,
+                        text=True,
+                        timeout=10
                     )
                     
-                    if error:
-                        restart_results[device.device_id] = {
-                            'device_name': device.device_name,
-                            'success': False,
-                            'error': error,
-                            'status': 'failed'
-                        }
-                    else:
+                    if result.returncode == 0:
                         restart_results[device.device_id] = {
                             'device_name': device.device_name,
                             'success': True,
-                            'message': 'Restart script executed successfully',
+                            'message': 'Restart script executed via SSH',
                             'status': 'restarting'
                         }
                         successful_restarts += 1
                         
-                        # Mark device as restarting - it will be offline temporarily
+                        # Mark device as restarting
                         device.connection_status = 'restarting'
                         device.last_seen = datetime.utcnow()
                         
                         # Log the restart event
                         restart_event = SecurityEvent(
                             device_id=device.device_id,
-                            event_type='device_restart',
-                            event_description=f'Device {device.device_name} restart script executed by {session.get("username")}',
+                            event_type='device_restart_ssh',
+                            event_description=f'Device {device.device_name} restarted via SSH by {session.get("username")}',
                             severity_level='info'
                         )
                         db.session.add(restart_event)
+                    else:
+                        restart_results[device.device_id] = {
+                            'device_name': device.device_name,
+                            'success': False,
+                            'error': f'SSH command failed: {result.stderr}',
+                            'status': 'failed'
+                        }
                         
                 except Exception as e:
                     restart_results[device.device_id] = {
@@ -3067,25 +3078,25 @@ def restart_all_devices():
                 restart_results[device.device_id] = {
                     'device_name': device.device_name,
                     'success': False,
-                    'error': 'Device not connected',
-                    'status': 'offline'
+                    'error': 'No SSH tunnel available',
+                    'status': 'no_tunnel'
                 }
         
-        # Commit all restart events and status changes
+        # Commit all events
         db.session.commit()
         
         return jsonify({
             'success': True,
-            'message': f'Restart script executed for {successful_restarts} of {len(devices)} devices',
+            'message': f'SSH restart executed for {successful_restarts} of {len(devices)} devices',
             'total_devices': len(devices),
             'successful_restarts': successful_restarts,
             'results': restart_results,
-            'restart_method': 'restart_script'
+            'restart_method': 'ssh_direct'
         })
         
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error restarting devices: {e}")
+        logger.error(f"Error restarting devices via SSH: {e}")
         return jsonify({
             'success': False,
             'error': str(e)
