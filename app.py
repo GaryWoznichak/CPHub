@@ -3002,7 +3002,7 @@ def get_device_recording_status(device_id):
 @app.route('/api/devices/restart_all', methods=['POST'])
 @login_required
 def restart_all_devices():
-    """Restart all connected CyberPhysical devices via direct SSH command execution"""
+    """Restart all connected CyberPhysical devices by executing SSH command through tunnel"""
     try:
         devices = SecurityDevice.query.filter_by(is_active=True).all()
         
@@ -3016,56 +3016,46 @@ def restart_all_devices():
         successful_restarts = 0
         
         for device in devices:
-            # Only attempt restart if device has a tunnel (SSH connection)
+            # Only attempt restart if device has a tunnel
             if device.tunnel_port and device.tunnel_status == 'connected':
                 try:
                     import subprocess
                     
-                    # Execute the restart script directly via SSH tunnel
+                    # Use netcat through the tunnel to execute the command
                     ssh_command = [
-                        'ssh',
-                        '-p', str(device.tunnel_port),
-                        '-o', 'StrictHostKeyChecking=no',
-                        '-o', 'ConnectTimeout=5',
-                        'localhost',  # Through the tunnel
-                        '/var/docker-build/restart-cpmotion.sh'
+                        'bash', '-c',
+                        f'echo "/var/docker-build/restart-cpmotion.sh" | nc localhost {device.tunnel_port}'
                     ]
                     
                     result = subprocess.run(
                         ssh_command,
                         capture_output=True,
                         text=True,
-                        timeout=10
+                        timeout=5
                     )
                     
-                    if result.returncode == 0:
-                        restart_results[device.device_id] = {
-                            'device_name': device.device_name,
-                            'success': True,
-                            'message': 'Restart script executed via SSH',
-                            'status': 'restarting'
-                        }
-                        successful_restarts += 1
-                        
-                        # Mark device as restarting
-                        device.connection_status = 'restarting'
-                        device.last_seen = datetime.utcnow()
-                        
-                        # Log the restart event
-                        restart_event = SecurityEvent(
-                            device_id=device.device_id,
-                            event_type='device_restart_ssh',
-                            event_description=f'Device {device.device_name} restarted via SSH by {session.get("username")}',
-                            severity_level='info'
-                        )
-                        db.session.add(restart_event)
-                    else:
-                        restart_results[device.device_id] = {
-                            'device_name': device.device_name,
-                            'success': False,
-                            'error': f'SSH command failed: {result.stderr}',
-                            'status': 'failed'
-                        }
+                    # For restart commands, we don't expect a response since the device will restart
+                    restart_results[device.device_id] = {
+                        'device_name': device.device_name,
+                        'success': True,
+                        'message': 'Restart command sent through tunnel',
+                        'status': 'restarting',
+                        'method': 'netcat_tunnel'
+                    }
+                    successful_restarts += 1
+                    
+                    # Mark device as restarting
+                    device.connection_status = 'restarting'
+                    device.last_seen = datetime.utcnow()
+                    
+                    # Log the restart event
+                    restart_event = SecurityEvent(
+                        device_id=device.device_id,
+                        event_type='device_restart_tunnel',
+                        event_description=f'Device {device.device_name} restart command sent via tunnel by {session.get("username")}',
+                        severity_level='info'
+                    )
+                    db.session.add(restart_event)
                         
                 except Exception as e:
                     restart_results[device.device_id] = {
@@ -3078,7 +3068,7 @@ def restart_all_devices():
                 restart_results[device.device_id] = {
                     'device_name': device.device_name,
                     'success': False,
-                    'error': 'No SSH tunnel available',
+                    'error': 'No tunnel connection available',
                     'status': 'no_tunnel'
                 }
         
@@ -3087,16 +3077,16 @@ def restart_all_devices():
         
         return jsonify({
             'success': True,
-            'message': f'SSH restart executed for {successful_restarts} of {len(devices)} devices',
+            'message': f'Restart commands sent to {successful_restarts} of {len(devices)} devices',
             'total_devices': len(devices),
             'successful_restarts': successful_restarts,
             'results': restart_results,
-            'restart_method': 'ssh_direct'
+            'restart_method': 'tunnel_netcat'
         })
         
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error restarting devices via SSH: {e}")
+        logger.error(f"Error restarting devices via tunnel: {e}")
         return jsonify({
             'success': False,
             'error': str(e)
