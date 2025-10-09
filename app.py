@@ -765,38 +765,31 @@ class DeviceManager:
             return None, error
 
     def send_device_name_to_device(self, device_id, device_name):
-        """Send device name to the actual CP motion device"""
-        try:
-            device = db.session.get(SecurityDevice, device_id)
-            if not device:
-                return False, "Device not found"
-            
-            # Prepare the device name data
-            name_data = {
-                'device_name': device_name
-            }
-            
-            logger.info(f"🏷️ Sending device name '{device_name}' to device {device_id}")
-            
-            # Send to the device through the existing device manager
-            result, error = self.make_device_request(
-                device_id, 
-                '/api/device_name',
-                method='POST',
-                data=name_data,
-                timeout=10
-            )
-            
-            if error:
-                logger.error(f"❌ Failed to send device name to device {device_id}: {error}")
-                return False, error
-            
-            logger.info(f"✅ Device name sent successfully to device {device_id}")
-            return True, "Device name sent successfully"
-            
-        except Exception as e:
-            logger.error(f"❌ Error sending device name to device {device_id}: {e}")
-            return False, str(e)
+    """Send device name via proxy to match web interface behavior"""
+    try:
+        device = db.session.get(SecurityDevice, device_id)
+        if not device:
+            return False, "Device not found"
+        
+        # Try using the proxy route instead of direct tunnel access
+        result, error = self.make_device_request(
+            device_id, 
+            '/api/device/update_name',  # Try this endpoint instead
+            method='POST',
+            data={'device_name': device_name},
+            timeout=10
+        )
+        
+        if error:
+            logger.error(f"❌ Failed to send device name to device {device_id}: {error}")
+            return False, error
+        
+        logger.info(f"✅ Device name sent successfully to device {device_id}")
+        return True, "Device name sent successfully"
+        
+    except Exception as e:
+        logger.error(f"❌ Error sending device name to device {device_id}: {e}")
+        return False, str(e)
 
     def get_all_devices_status(self):
         """Get status from all configured devices"""
