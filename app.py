@@ -774,7 +774,7 @@ class DeviceManager:
             # Try using the proxy route instead of direct tunnel access
             result, error = self.make_device_request(
                 device_id, 
-                '/api/device/update_name',  # Try this endpoint instead
+                '/api/device_name',  # Try this endpoint instead
                 method='POST',
                 data={'device_name': device_name},
                 timeout=10
