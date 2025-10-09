@@ -1583,7 +1583,6 @@ def proxy_device(device_id, path=''):
         content = content.replace("apiUrl + '/logs", f"apiUrl + '/proxy/{device_id}/logs")
         content = content.replace('"/download/', f'"/proxy/{device_id}/download/')
         content = content.replace("'/download/", f"'/proxy/{device_id}/download/")
-        # Fix video streaming - be more aggressive with ALL variations
         content = content.replace('"/stream_video/', f'"/proxy/{device_id}/stream_video/')
         content = content.replace("'/stream_video/", f"'/proxy/{device_id}/stream_video/")
         content = content.replace('href="/stream_video/', f'href="/proxy/{device_id}/stream_video/')
@@ -1600,6 +1599,10 @@ def proxy_device(device_id, path=''):
         content = content.replace("'/delete/", f"'/proxy/{device_id}/delete/")
         content = content.replace('fetch("/delete/', f'fetch("/proxy/{device_id}/delete/')
         content = content.replace("fetch('/delete/", f"fetch('/proxy/{device_id}/delete/")
+        content = content.replace('"/api/device/update_name"', f'"/proxy/{device_id}/api/device/update_name"')
+        content = content.replace("'/api/device/update_name'", f"'/proxy/{device_id}/api/device/update_name'")
+        content = content.replace('fetch("/api/device/update_name"', f'fetch("/proxy/{device_id}/api/device/update_name"')
+        content = content.replace("fetch('/api/device/update_name'", f"fetch('/proxy/{device_id}/api/device/update_name'")
                 
         return content, response.status_code, dict(response.headers)
 
@@ -1677,6 +1680,76 @@ def proxy_device(device_id, path=''):
         return content, response.status_code, dict(response.headers)
    
     return response.content, response.status_code, dict(response.headers)
+
+@app.route('/proxy/<int:device_id>/api/device/update_name', methods=['POST'])
+@login_required
+def proxy_device_name_update(device_id):
+    """Handle device name updates through proxy and sync with hub database"""
+    
+    device = db.session.get(SecurityDevice, device_id)
+    if not device or not device.tunnel_port:
+        return jsonify({'success': False, 'error': 'Device not found or no tunnel'}), 404
+    
+    try:
+        # Get the new name from the request
+        data = request.get_json()
+        new_device_name = data.get('device_name', '').strip()
+        
+        if not new_device_name:
+            return jsonify({'success': False, 'error': 'Device name cannot be empty'}), 400
+        
+        # Forward the request to the actual device
+        target_url = f"http://localhost:{device.tunnel_port}/api/device/update_name"
+        
+        response = requests.post(
+            target_url, 
+            json=data,
+            timeout=10,
+            headers={
+                'Content-Type': 'application/json'
+            }
+        )
+        
+        if response.status_code == 200:
+            # If device accepted the name change, update our hub database too
+            logger.info(f"🔄 Updating device {device_id} name from '{device.device_name}' to '{new_device_name}'")
+            
+            old_name = device.device_name
+            device.device_name = new_device_name
+            db.session.commit()
+            
+            # Log the name change event
+            name_change_event = SecurityEvent(
+                device_id=device_id,
+                event_type='device_name_changed',
+                event_description=f'Device name changed from "{old_name}" to "{new_device_name}" via proxy',
+                severity_level='info'
+            )
+            db.session.add(name_change_event)
+            db.session.commit()
+            
+            logger.info(f"✅ Device {device_id} name updated successfully in hub database")
+            
+            return jsonify({
+                'success': True, 
+                'message': f'Device name updated to "{new_device_name}"',
+                'old_name': old_name,
+                'new_name': new_device_name
+            })
+        else:
+            # Device rejected the change
+            return jsonify({
+                'success': False, 
+                'error': f'Device rejected name change: HTTP {response.status_code}'
+            }), response.status_code
+            
+    except requests.exceptions.Timeout:
+        return jsonify({'success': False, 'error': 'Device connection timeout'}), 504
+    except requests.exceptions.ConnectionError:
+        return jsonify({'success': False, 'error': 'Device connection failed'}), 503
+    except Exception as e:
+        logger.error(f"❌ Error updating device name via proxy: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/stream_video/<path:filename>')
 @login_required
