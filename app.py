@@ -764,6 +764,40 @@ class DeviceManager:
             self.db.session.commit()
             return None, error
 
+    def send_device_name_to_device(self, device_id, device_name):
+        """Send device name to the actual CP motion device"""
+        try:
+            device = db.session.get(SecurityDevice, device_id)
+            if not device:
+                return False, "Device not found"
+            
+            # Prepare the device name data
+            name_data = {
+                'device_name': device_name
+            }
+            
+            logger.info(f"🏷️ Sending device name '{device_name}' to device {device_id}")
+            
+            # Send to the device through the existing device manager
+            result, error = self.make_device_request(
+                device_id, 
+                '/api/device_name',
+                method='POST',
+                data=name_data,
+                timeout=10
+            )
+            
+            if error:
+                logger.error(f"❌ Failed to send device name to device {device_id}: {error}")
+                return False, error
+            
+            logger.info(f"✅ Device name sent successfully to device {device_id}")
+            return True, "Device name sent successfully"
+            
+        except Exception as e:
+            logger.error(f"❌ Error sending device name to device {device_id}: {e}")
+            return False, str(e)
+
     def get_all_devices_status(self):
         """Get status from all configured devices"""
         devices = SecurityDevice.query.filter_by(is_active=True).all()
@@ -1353,6 +1387,18 @@ def update_device(device_id):
                 print(f"Saving GPS: {latitude}, {longitude}")  # Debug log
             except ValueError:
                 print(f"Invalid GPS coordinates: {latitude}, {longitude}")
+
+        if device.device_name != old_device_name and device.connection_status == 'connected':
+            logger.info(f"🏷️ Device name changed from '{old_device_name}' to '{device.device_name}', syncing with device...")
+            
+            success, message = device_manager.send_device_name_to_device(device_id, device.device_name)
+            
+            if success:
+                flash(f'Device "{device.device_name}" updated and name synced with device!', 'success')
+            else:
+                flash(f'Device updated, but failed to sync name with device: {message}', 'warning')
+        else:
+            flash(f'Device "{device.device_name}" updated successfully!', 'success')
         
         db.session.commit()
         
@@ -1366,6 +1412,60 @@ def update_device(device_id):
         logger.error(f"Error updating device {device_id}: {e}")
         flash(f'Error updating device: {str(e)}', 'error')
         return redirect(url_for('edit_device', device_id=device_id))
+
+@app.route('/api/devices/<int:device_id>/sync_name', methods=['POST'])
+@login_required
+def sync_device_name(device_id):
+    """Manually sync device name with the actual device"""
+    try:
+        device = db.session.get(SecurityDevice, device_id)
+        if not device:
+            return jsonify({'success': False, 'error': 'Device not found'}), 404
+        
+        if device.connection_status != 'connected':
+            return jsonify({
+                'success': False, 
+                'error': 'Device must be connected to sync name'
+            }), 400
+        
+        # Get the device name from request or use current name
+        data = request.get_json() or {}
+        device_name = data.get('device_name', device.device_name).strip()
+        
+        if not device_name:
+            return jsonify({'success': False, 'error': 'Device name cannot be empty'}), 400
+        
+        # Send to device
+        success, message = device_manager.send_device_name_to_device(device_id, device_name)
+        
+        if success:
+            # Update hub database if name was provided in request
+            if data.get('device_name') and data.get('device_name') != device.device_name:
+                old_name = device.device_name
+                device.device_name = device_name
+                db.session.commit()
+                
+                # Log the name change
+                name_change_event = SecurityEvent(
+                    device_id=device_id,
+                    event_type='device_name_synced',
+                    event_description=f'Device name synced: "{old_name}" → "{device_name}"',
+                    severity_level='info'
+                )
+                db.session.add(name_change_event)
+                db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Device name "{device_name}" synced successfully',
+                'device_name': device_name
+            })
+        else:
+            return jsonify({'success': False, 'error': message}), 500
+            
+    except Exception as e:
+        logger.error(f"Error syncing device name: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/version')
 def get_version():

@@ -31,6 +31,15 @@
                 <i class="fas fa-edit"></i>
                 <span>Edit Device</span>
             </a>
+            {% if device.connection_status == 'connected' %}
+            <button type="button" 
+                    class="action-button" 
+                    onclick="syncDeviceName({{ device.device_id }}, '{{ device.device_name }}')"
+                    title="Sync device name with actual device">
+                <i class="fas fa-sync"></i>
+                <span>Sync Name</span>
+            </button>
+            {% endif %}
         </div>
     </div>
 
@@ -495,6 +504,33 @@ function pingDevice(deviceId, deviceIp) {
                 button.classList.remove('success', 'error');
             }, 2000);
         });
+}
+
+function syncDeviceName(deviceId, currentName) {
+    if (confirm(`Sync device name "${currentName}" with the actual device?`)) {
+        fetch(`/api/devices/${deviceId}/sync_name`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                'device_name': currentName
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`✅ ${data.message}`);
+                location.reload(); // Refresh the page
+            } else {
+                alert(`❌ Failed to sync name: ${data.error}`);
+            }
+        })
+        .catch(error => {
+            console.error('Error syncing device name:', error);
+            alert(`❌ Error syncing device name: ${error}`);
+        });
+    }
 }
 
 function remoteAccess(deviceId, deviceIp, devicePort) {
