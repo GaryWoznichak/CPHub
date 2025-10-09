@@ -1711,22 +1711,31 @@ def proxy_device_name_update(device_id):
         if not new_device_name:
             return jsonify({'success': False, 'error': 'Device name cannot be empty'}), 400
         
-        # Forward the request to the actual device
+        logger.info(f"🔄 Proxy updating device {device_id} name from '{device.device_name}' to '{new_device_name}'")
+        
+        # Forward the request to the actual device through tunnel
         target_url = f"http://localhost:{device.tunnel_port}/api/device/update_name"
+        
+        # Get hub's registration key for authentication
+        hub = HubConfiguration.query.filter_by(is_active=True).first()
+        headers = {
+            'Content-Type': 'application/json',
+            'X-Hub-ID': 'CyberPhysical Hub',
+            'X-Registration-Key': hub.master_registration_key if hub else ''
+        }
         
         response = requests.post(
             target_url, 
             json=data,
             timeout=10,
-            headers={
-                'Content-Type': 'application/json'
-            }
+            headers=headers
         )
+        
+        logger.info(f"📤 Device response: HTTP {response.status_code}")
+        logger.info(f"📤 Device response body: {response.text}")
         
         if response.status_code == 200:
             # If device accepted the name change, update our hub database too
-            logger.info(f"🔄 Updating device {device_id} name from '{device.device_name}' to '{new_device_name}'")
-            
             old_name = device.device_name
             device.device_name = new_device_name
             db.session.commit()
@@ -1741,7 +1750,7 @@ def proxy_device_name_update(device_id):
             db.session.add(name_change_event)
             db.session.commit()
             
-            logger.info(f"✅ Device {device_id} name updated successfully in hub database")
+            logger.info(f"✅ Device {device_id} name updated successfully: '{old_name}' → '{new_device_name}'")
             
             return jsonify({
                 'success': True, 
@@ -1751,14 +1760,18 @@ def proxy_device_name_update(device_id):
             })
         else:
             # Device rejected the change
+            error_text = response.text if response.text else f'HTTP {response.status_code}'
+            logger.warning(f"❌ Device rejected name change: {error_text}")
             return jsonify({
                 'success': False, 
-                'error': f'Device rejected name change: HTTP {response.status_code}'
+                'error': f'Device rejected name change: {error_text}'
             }), response.status_code
             
     except requests.exceptions.Timeout:
+        logger.error(f"⏱️ Device {device_id} name update timeout")
         return jsonify({'success': False, 'error': 'Device connection timeout'}), 504
     except requests.exceptions.ConnectionError:
+        logger.error(f"🔌 Device {device_id} name update connection failed")
         return jsonify({'success': False, 'error': 'Device connection failed'}), 503
     except Exception as e:
         logger.error(f"❌ Error updating device name via proxy: {e}")
