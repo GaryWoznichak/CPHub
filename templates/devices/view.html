@@ -20,10 +20,6 @@
         </div>
     </div>
 
-    <div style="background: red; color: white; padding: 10px; margin: 10px 0;">
-        DEBUG: connection_status = "{{ device.connection_status }}", approval_status = "{{ device.approval_status }}", tunnel_status = "{{ device.tunnel_status }}"
-    </div>
-
     <!-- Back and Edit Buttons -->
     <div class="mb-4">
         <div class="header-buttons">
@@ -35,7 +31,7 @@
                 <i class="fas fa-edit"></i>
                 <span>Edit Device</span>
             </a>
-            {% if device.connection_status == 'connected' %}
+            {% if device.tunnel_status == 'connected' or device.connection_status == 'connected' %}
             <button type="button" 
                     class="action-button" 
                     onclick="syncDeviceName({{ device.device_id }}, '{{ device.device_name }}')"
