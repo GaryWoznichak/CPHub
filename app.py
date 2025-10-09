@@ -1603,6 +1603,12 @@ def proxy_device(device_id, path=''):
         content = content.replace("'/api/device/update_name'", f"'/proxy/{device_id}/api/device/update_name'")
         content = content.replace('fetch("/api/device/update_name"', f'fetch("/proxy/{device_id}/api/device/update_name"')
         content = content.replace("fetch('/api/device/update_name'", f"fetch('/proxy/{device_id}/api/device/update_name'")
+        content = content.replace('"/api/device/update_name"', f'"/proxy/{device_id}/api/device/update_name"')
+        content = content.replace("'/api/device/update_name'", f"'/proxy/{device_id}/api/device/update_name'")
+        content = content.replace('fetch("/api/device/update_name"', f'fetch("/proxy/{device_id}/api/device/update_name"')
+        content = content.replace("fetch('/api/device/update_name'", f"fetch('/proxy/{device_id}/api/device/update_name'")
+        content = content.replace('"/api/device/settings"', f'"/proxy/{device_id}/api/device/settings"')
+        content = content.replace("'/api/device/settings'", f"'/proxy/{device_id}/api/device/settings'")
                 
         return content, response.status_code, dict(response.headers)
 
@@ -1675,6 +1681,13 @@ def proxy_device(device_id, path=''):
         content = content.replace("'/delete/", f"'/proxy/{device_id}/delete/")
         content = content.replace('fetch("/delete/', f'fetch("/proxy/{device_id}/delete/')
         content = content.replace("fetch('/delete/", f"fetch('/proxy/{device_id}/delete/")
+        # Add these lines with your other content.replace() calls in the proxy_device function:
+        content = content.replace('"/api/device/update_name"', f'"/proxy/{device_id}/api/device/update_name"')
+        content = content.replace("'/api/device/update_name'", f"'/proxy/{device_id}/api/device/update_name'")
+        content = content.replace('fetch("/api/device/update_name"', f'fetch("/proxy/{device_id}/api/device/update_name"')
+        content = content.replace("fetch('/api/device/update_name'", f"fetch('/proxy/{device_id}/api/device/update_name'")
+        content = content.replace('"/api/device/settings"', f'"/proxy/{device_id}/api/device/settings"')
+        content = content.replace("'/api/device/settings'", f"'/proxy/{device_id}/api/device/settings'")
             
         
         return content, response.status_code, dict(response.headers)
