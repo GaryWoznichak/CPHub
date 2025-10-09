@@ -1425,7 +1425,7 @@ def sync_device_name(device_id):
         if not device:
             return jsonify({'success': False, 'error': 'Device not found'}), 404
         
-        if device.connection_status != 'connected':
+        if device.tunnel_status != 'connected' and device.connection_status != 'connected':
             return jsonify({
                 'success': False, 
                 'error': 'Device must be connected to sync name'
