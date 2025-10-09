@@ -1349,6 +1349,9 @@ def update_device(device_id):
         return redirect(url_for('list_devices'))
     
     try:
+
+        old_device_name = device.device_name
+
         # Update device fields
         device.device_name = request.form.get('device_name', '').strip()
         device.device_type = request.form.get('device_type', '').strip()
