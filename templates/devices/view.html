@@ -7,16 +7,12 @@
             <h1>{{ device.device_name }}</h1>
             <div class="device-subtitle">{{ device.device_type }} • Serial: {{ device.serial_number }}</div>
         </div>
-        <div class="header-right">
-            <div class="status-indicator status-{{ 'connected' if device.approval_status == 'approved' else (device.approval_status or 'unknown') }}">
-                {% if device.approval_status == 'approved' %}
-                    <i class="fas fa-check-circle"></i> Connected
-                {% elif device.approval_status == 'pending' %}
-                    <i class="fas fa-clock"></i> Pending
-                {% else %}
-                    <i class="fas fa-times-circle"></i> Offline
-                {% endif %}
-            </div>
+        <div class="status-indicator status-{{ 'connected' if (device.connection_status == 'connected' or device.tunnel_status == 'connected') else 'disconnected' }}">
+            {% if device.connection_status == 'connected' or device.tunnel_status == 'connected' %}
+                <i class="fas fa-check-circle"></i> Connected
+            {% else %}
+                <i class="fas fa-times-circle"></i> Disconnected
+            {% endif %}
         </div>
     </div>
 
@@ -40,6 +36,13 @@
                 <span>Sync Name</span>
             </button>
             {% endif %}
+            <button type="button" 
+                    class="action-button delete-button" 
+                    onclick="deleteDevice({{ device.device_id }}, '{{ device.device_name }}')"
+                    title="Delete this device">
+                <i class="fas fa-trash"></i>
+                <span>Delete Device</span>
+            </button>
         </div>
     </div>
 
@@ -69,12 +72,6 @@
                         <span class="value">{{ device.serial_number }}</span>
                     </div>
                     <div class="info-item">
-                        <span class="label">Status:</span>
-                        <span class="value badge badge-{{ 'success' if device.is_active else 'danger' }}">
-                            {{ 'Active' if device.is_active else 'Inactive' }}
-                        </span>
-                    </div>
-                    <div class="info-item">
                         <span class="label">Description:</span>
                         <span class="value">{{ device.description or 'N/A' }}</span>
                     </div>
@@ -102,20 +99,6 @@
                     <div class="info-item">
                         <span class="label">Port:</span>
                         <span class="value">{{ device.port or 'Default' }}</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">Connection Status:</span>
-                        <span class="value">
-                            <span class="status-badge status-{{ 'connected' if device.approval_status == 'approved' else (device.approval_status or 'unknown') }}">
-                                {% if device.approval_status == 'approved' %}
-                                    CONNECTED
-                                {% elif device.approval_status == 'pending' %}
-                                    PENDING
-                                {% else %}
-                                    UNKNOWN
-                                {% endif %}
-                            </span>
-                        </span>
                     </div>
                     <div class="info-item">
                         <span class="label">Registration Key:</span>
@@ -250,6 +233,16 @@
     gap: 12px;
     align-items: center;
     margin-bottom: 30px; /* Added space between buttons and cards */
+}
+
+.delete-button {
+    background: #e74c3c !important;
+    border-color: #c0392b !important;
+}
+
+.delete-button:hover {
+    background: #c0392b !important;
+    border-color: #a93226 !important;
 }
 
 .action-button {
@@ -592,5 +585,32 @@ function remoteAccess(deviceId, deviceIp, devicePort) {
             alert('❌ Error determining connection method');
         });
 }
+
+function deleteDevice(deviceId, deviceName) {
+    const confirmDelete = confirm(`⚠️ DELETE DEVICE?\n\nDevice: ${deviceName}\n\nThis action cannot be undone and will remove all device data including events and location information.\n\nContinue?`);
+    
+    if (!confirmDelete) return;
+    
+    fetch(`/api/devices/${deviceId}/delete`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`✅ Device "${deviceName}" deleted successfully.`);
+            window.location.href = '/devices';
+        } else {
+            alert(`❌ Failed to delete device: ${data.error}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error deleting device:', error);
+        alert(`⚠️ Error deleting device: ${error.message}`);
+    });
+}
+
 </script>
 {% endblock %}

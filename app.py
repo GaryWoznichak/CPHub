@@ -71,7 +71,7 @@ def initialize_hub():
         hub = HubConfiguration(
             hub_name="PacketViper Enterprise Hub",
             master_registration_key=generate_registration_key(),
-            hub_port=7700
+            hub_port=8771
         )
         db.session.add(hub)
         db.session.commit()
@@ -540,7 +540,7 @@ class HubConfiguration(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     hub_name = db.Column(db.String(100), nullable=False)
     master_registration_key = db.Column(db.String(64), unique=True, nullable=False)
-    hub_port = db.Column(db.Integer, default=7700)
+    hub_port = db.Column(db.Integer, default=8771)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
     
@@ -3279,6 +3279,63 @@ def restart_all_devices():
             'error': str(e)
         }), 500
 
+@app.route('/api/devices/<int:device_id>/motion_status')
+@login_required
+def get_device_motion_status(device_id):
+    """Get motion detection status from device through tunnel or direct IP"""
+    device = db.session.get(SecurityDevice, device_id)
+    if not device:
+        return jsonify({'success': False, 'error': 'Device not found'}), 404
+    
+    try:
+        # Use device manager to get motion status from the device
+        motion_data, error = device_manager.make_device_request(device_id, '/motion_status')
+        
+        if error:
+            return jsonify({'success': False, 'error': error}), 500
+        
+        return jsonify({
+            'success': True,
+            'motion_detection_enabled': motion_data.get('motion_detection_enabled', False)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting motion status for device {device_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/devices/<int:device_id>/motion_detection/toggle', methods=['POST'])
+@login_required
+def toggle_device_motion_detection(device_id):
+    """Toggle motion detection on device through tunnel or direct IP"""
+    device = db.session.get(SecurityDevice, device_id)
+    if not device:
+        return jsonify({'success': False, 'error': 'Device not found'}), 404
+    
+    try:
+        data = request.get_json()
+        enabled = data.get('enabled', False)
+        
+        # Use device manager to toggle motion detection on the device
+        result, error = device_manager.make_device_request(
+            device_id, 
+            '/motion_detection/toggle',
+            method='POST',
+            data={'enabled': enabled}
+        )
+        
+        if error:
+            return jsonify({'success': False, 'error': error}), 500
+        
+        return jsonify({
+            'success': True,
+            'message': f'Motion detection {"enabled" if enabled else "disabled"}',
+            'enabled': enabled
+        })
+        
+    except Exception as e:
+        logger.error(f"Error toggling motion detection for device {device_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 def setup_ssl_context():
     """Setup SSL context for HTTPS"""
     ssl_dir = "ssl"
@@ -3314,4 +3371,4 @@ def setup_ssl_context():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(host='0.0.0.0', port=7700, debug=False)
+    app.run(host='0.0.0.0', port=8771, debug=False)
