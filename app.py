@@ -71,7 +71,7 @@ def initialize_hub():
         hub = HubConfiguration(
             hub_name="PacketViper Enterprise Hub",
             master_registration_key=generate_registration_key(),
-            hub_port=8771
+            hub_port=7700
         )
         db.session.add(hub)
         db.session.commit()
@@ -540,7 +540,7 @@ class HubConfiguration(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     hub_name = db.Column(db.String(100), nullable=False)
     master_registration_key = db.Column(db.String(64), unique=True, nullable=False)
-    hub_port = db.Column(db.Integer, default=8771)
+    hub_port = db.Column(db.Integer, default=7700)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
     
@@ -3372,4 +3372,4 @@ def setup_ssl_context():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(host='0.0.0.0', port=8771, debug=False)
+    app.run(host='0.0.0.0', port=7700, debug=False)
