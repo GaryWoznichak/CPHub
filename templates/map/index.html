@@ -347,19 +347,19 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 const markerIcons = {
     connected: L.divIcon({
         className: 'custom-marker connected',
-        html: '<div class="marker-icon"><i class="fas fa-circle"></i></div>',
+        html: '<div class="marker-icon"></div>',
         iconSize: [20, 20],
         iconAnchor: [10, 10]
     }),
     pending: L.divIcon({
         className: 'custom-marker pending',
-        html: '<div class="marker-icon"><i class="fas fa-circle"></i></div>',
+        html: '<div class="marker-icon"></div>',
         iconSize: [20, 20],
         iconAnchor: [10, 10]
     }),
     disconnected: L.divIcon({
         className: 'custom-marker disconnected',
-        html: '<div class="marker-icon"><i class="fas fa-circle"></i></div>',
+        html: '<div class="marker-icon"></div>',
         iconSize: [20, 20],
         iconAnchor: [10, 10]
     })
@@ -645,7 +645,7 @@ function updateDeviceRecordingIndicator(deviceId, isRecording) {
 // Add devices to map
 const markers = [];
 devices.forEach(device => {
-    const status = device.approval_status === 'approved' ? 'connected' : 
+    const status = (device.connection_status === 'connected' || device.tunnel_status === 'connected') ? 'connected' : 
                (device.approval_status === 'pending' ? 'pending' : 'disconnected');
     const icon = markerIcons[status] || markerIcons['disconnected'];
    

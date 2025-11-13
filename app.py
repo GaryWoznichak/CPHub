@@ -1501,6 +1501,7 @@ def interactive_map():
             'device_type': device.device_type,
             'model_number': device.model_number,
             'connection_status': device.connection_status,
+            'tunnel_status': device.tunnel_status,  
             'approval_status': device.approval_status, 
             'ip_address': device.ip_address,
             'port': device.port,
