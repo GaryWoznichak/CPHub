@@ -36,6 +36,10 @@ def login_required(f):
     decorated_function.__name__ = f.__name__
     return decorated_function
 
+def get_customer_id():
+    """Get current customer_id from session"""
+    return session.get('customer_id')
+
 load_dotenv()
 
 app = Flask(__name__)
@@ -71,7 +75,7 @@ def initialize_hub():
         hub = HubConfiguration(
             hub_name="PacketViper Enterprise Hub",
             master_registration_key=generate_registration_key(),
-            hub_port=8771
+            hub_port=int(os.getenv('HUB_PORT'))
         )
         db.session.add(hub)
         db.session.commit()
@@ -226,7 +230,11 @@ class DeviceMonitor:
                 
                 # Determine new status
                 if is_online:
-                    new_status = 'connected'
+                    # Only allow approved devices to connect
+                    if device.approval_status == 'approved':
+                        new_status = 'connected'
+                    else:
+                        new_status = 'pending'  # Keep pending if not approved
                 else:
                     # Only mark as disconnected if it was previously connected
                     if old_status == 'connected':
@@ -258,6 +266,7 @@ class DeviceMonitor:
                     try:
                         alert_event = SecurityEvent(
                             device_id=device.device_id,
+                            customer_id=device.customer_id,
                             event_type='device_offline',
                             event_description=f'Device {device.device_name} went offline',
                             severity_level='warning'
@@ -275,6 +284,7 @@ class DeviceMonitor:
                     try:
                         recovery_event = SecurityEvent(
                             device_id=device.device_id,
+                            customer_id=device.customer_id,
                             event_type='device_online',
                             event_description=f'Device {device.device_name} came online',
                             severity_level='info'
@@ -399,10 +409,17 @@ class TunnelDetector:
                                 port = int(part.split(':')[-1])
                             except ValueError:
                                 continue
-                            if TUNNEL_PORT_START <= port <= TUNNEL_PORT_END:
+                            # Check if port falls within any customer's port range
+                            customer = Customer.query.filter(
+                                Customer.tunnel_port_start <= port,
+                                Customer.tunnel_port_end >= port,
+                                Customer.is_active == True
+                            ).first()
+                            
+                            if customer:
                                 active_tunnel_ports.add(port)
-                                logger.info(f"🎯 Detected active tunnel on port {port}")
-                                self._handle_detected_tunnel(port)
+                                logger.info(f"🎯 Detected active tunnel on port {port} for customer {customer.customer_name}")
+                                self._handle_detected_tunnel(port, customer.customer_id)
             
             # NEW CODE: Update devices with missing tunnels
             all_tunnel_devices = SecurityDevice.query.filter(SecurityDevice.tunnel_port.isnot(None)).all()
@@ -431,7 +448,7 @@ class TunnelDetector:
         except Exception as e:
             logger.error(f"⚠️ Error scanning for tunnels: {e}")
             
-    def _handle_detected_tunnel(self, tunnel_port):
+    def _handle_detected_tunnel(self, tunnel_port, customer_id):
         """Handle a newly detected tunnel"""
         # Check if device already exists for this tunnel port
         existing_device = SecurityDevice.query.filter_by(tunnel_port=tunnel_port).first()
@@ -455,6 +472,14 @@ class TunnelDetector:
             
         # Create new pending device for unknown tunnel
         try:
+            is_rejected = RejectedDevice.query.filter_by(
+                tunnel_port=tunnel_port,
+                customer_id=customer_id
+            ).first()
+            
+            if is_rejected:
+                logger.warning(f"⛔ Blocked rejected device from re-registering on port {tunnel_port}")
+                return
             # Get device info through tunnel
             device_info = self._probe_tunnel_device(tunnel_port)
             
@@ -466,6 +491,7 @@ class TunnelDetector:
                 description=f'Auto-detected via tunnel on port {tunnel_port}',
                 tunnel_port=tunnel_port,
                 tunnel_status='connected',
+                customer_id=customer_id,
                 connection_status='tunnel_pending',
                 approval_status='pending',
                 last_seen=datetime.utcnow()
@@ -479,6 +505,7 @@ class TunnelDetector:
             # Create event
             event = SecurityEvent(
                 device_id=new_device.device_id,
+                customer_id=customer_id,
                 event_type='tunnel_detected',
                 event_description=f'New device tunnel detected on port {tunnel_port}',
                 severity_level='info'
@@ -526,7 +553,7 @@ class SecurityDevice(db.Model):
     last_heartbeat = db.Column(db.DateTime, nullable=True)
     tunnel_port = db.Column(db.Integer, nullable=True)
     tunnel_status = db.Column(db.String(20), default='disconnected', nullable=True)
-    approval_status = db.Column(db.String(20), default='approved', nullable=True)
+    approval_status = db.Column(db.String(20), default='pending', nullable=True)
     customer_id = db.Column(db.Integer, db.ForeignKey('customers.customer_id'), nullable=True)
     
     # Define relationships
@@ -534,13 +561,23 @@ class SecurityDevice(db.Model):
     statuses = db.relationship('DeviceStatus', backref='device', lazy='dynamic')
     events = db.relationship('SecurityEvent', backref='device', lazy='dynamic')
 
+class RejectedDevice(db.Model):
+    __tablename__ = 'rejected_devices'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    tunnel_port = db.Column(db.Integer, unique=True, nullable=False)
+    device_name = db.Column(db.String(100), nullable=True)
+    rejected_at = db.Column(db.DateTime, default=datetime.utcnow)
+    rejected_by = db.Column(db.String(100), nullable=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.customer_id'), nullable=True)
+
 class HubConfiguration(db.Model):
     __tablename__ = 'hub_configuration'
     
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     hub_name = db.Column(db.String(100), nullable=False)
     master_registration_key = db.Column(db.String(64), unique=True, nullable=False)
-    hub_port = db.Column(db.Integer, default=8771)
+    hub_port = db.Column(db.Integer)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
     
@@ -891,7 +928,10 @@ class Customer(db.Model):
     customer_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     customer_name = db.Column(db.String(100), nullable=False)
     customer_code = db.Column(db.String(20), unique=True, nullable=False)
+    license_key = db.Column(db.String(64), nullable=True)
     subscription_plan = db.Column(db.String(50), default='municipal')
+    tunnel_port_start = db.Column(db.Integer, nullable=True)
+    tunnel_port_end = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
     
@@ -950,13 +990,16 @@ atexit.register(tunnel_detector.stop_detection)
 @app.route('/')
 @login_required
 def home():
-    devices = SecurityDevice.query.filter_by(is_active=True).all()
+    customer_id = get_customer_id()
+    devices = SecurityDevice.query.filter_by(is_active=True, customer_id=customer_id, approval_status='approved').all()
+    pending_devices = SecurityDevice.query.filter_by(is_active=True, customer_id=customer_id, approval_status='pending').all()
     hub = HubConfiguration.query.filter_by(is_active=True).first()
-    recent_events = SecurityEvent.query.order_by(SecurityEvent.event_timestamp.desc()).limit(5).all()
+    recent_events = SecurityEvent.query.filter_by(customer_id=customer_id).order_by(SecurityEvent.event_timestamp.desc()).limit(5).all()
     
     return render_template('index.html', 
                          title='Security Operations Center',
                          devices=devices,
+                         pending_devices=pending_devices,
                          hub=hub,
                          recent_events=recent_events,
                          is_customer_view=False)
@@ -964,8 +1007,10 @@ def home():
 @app.route('/devices')
 @login_required
 def list_devices():
-    devices = SecurityDevice.query.all()
-    return render_template('devices/list.html', title='Security Devices', devices=devices)
+    customer_id = get_customer_id()
+    devices = SecurityDevice.query.filter_by(customer_id=customer_id, approval_status='approved').all()
+    pending_devices = SecurityDevice.query.filter_by(customer_id=customer_id, approval_status='pending').all()
+    return render_template('devices/list.html', title='Security Devices', devices=devices, pending_devices=pending_devices)
 
 @app.route('/initialize_hub')
 @login_required
@@ -981,7 +1026,8 @@ def initialize_hub_route():
 @app.route('/devices/<int:device_id>')
 @login_required
 def view_device(device_id):
-    device = SecurityDevice.query.get_or_404(device_id)
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first_or_404()
     
     # Get live data from device if it has an IP
     camera_status = None
@@ -1013,7 +1059,8 @@ def view_device(device_id):
 @app.route('/events')
 @login_required
 def list_events():
-    events = SecurityEvent.query.order_by(SecurityEvent.event_timestamp.desc()).all()
+    customer_id = get_customer_id()
+    events = SecurityEvent.query.filter_by(customer_id=customer_id).order_by(SecurityEvent.event_timestamp.desc()).all()
     return render_template('events/list.html', title='Security Events', events=events)
 
 @app.route('/devices/add', methods=['GET', 'POST'])
@@ -1082,7 +1129,8 @@ def add_device():
 @app.route('/events/<int:event_id>')
 @login_required
 def view_event(event_id):
-    event = SecurityEvent.query.get_or_404(event_id)
+    customer_id = get_customer_id()
+    event = SecurityEvent.query.filter_by(event_id=event_id, customer_id=customer_id).first_or_404()
     return render_template('events/view.html', 
                            title=f'Event: {event.event_type}',
                            event=event)
@@ -1092,7 +1140,8 @@ def view_event(event_id):
 def manage_keys():
     """Read-only key display for customers"""
     hub = HubConfiguration.query.filter_by(is_active=True).first()
-    devices = SecurityDevice.query.all()
+    customer_id = get_customer_id()
+    devices = SecurityDevice.query.filter_by(customer_id=customer_id).all()
     
     return render_template('admin/keys.html', 
                          title='Registration Key Information',
@@ -1121,7 +1170,8 @@ def emergency_key_reset():
             hub.master_registration_key = new_key
             
             # Update all devices to pending status
-            devices = SecurityDevice.query.all()
+            customer_id = get_customer_id()
+            devices = SecurityDevice.query.filter_by(customer_id=customer_id).all()
             for device in devices:
                 device.registration_key = new_key
                 device.connection_status = 'pending'
@@ -1151,14 +1201,100 @@ def emergency_key_reset():
 def settings():
     """Main settings page"""
     hub = HubConfiguration.query.filter_by(is_active=True).first()
-    devices = SecurityDevice.query.all()
-    recent_events = SecurityEvent.query.order_by(SecurityEvent.event_timestamp.desc()).limit(10).all()
+    customer_id = get_customer_id()
+    devices = SecurityDevice.query.filter_by(customer_id=customer_id).all()
+    recent_events = SecurityEvent.query.filter_by(customer_id=customer_id).order_by(SecurityEvent.event_timestamp.desc()).limit(10).all()
     
     return render_template('settings/index.html', 
                          title='System Settings',
                          hub=hub,
                          devices=devices,
-                         recent_events=recent_events) 
+                         recent_events=recent_events)
+
+@app.route('/settings/license')
+@login_required
+def manage_license():
+    """License management page"""
+    customer_id = get_customer_id()
+    customer = Customer.query.get(customer_id)
+    
+    return render_template('settings/license.html', 
+                         title='License Management',
+                         customer=customer)
+
+@app.route('/api/license/update', methods=['POST'])
+@login_required
+def update_license():
+    """Update customer license key after verification"""
+    try:
+        data = request.get_json()
+        license_key = data.get('license_key', '').strip()
+        
+        if not license_key:
+            return jsonify({'success': False, 'error': 'License key is required'}), 400
+        
+        customer_id = get_customer_id()
+        customer = Customer.query.get(customer_id)
+        
+        if not customer:
+            return jsonify({'success': False, 'error': 'Customer not found'}), 404
+        
+        # Verify license with license server
+        LICENSE_SERVER = "https://verify.platogate.com"
+        APP_CODE = "CYBER_PHYSICAL"
+        
+        logger.info(f"🔑 Verifying license key: {license_key}")
+        
+        response = requests.post(
+            f"{LICENSE_SERVER}/api/v1/license/check",
+            json={
+                "license_key": license_key,
+                "app_code": APP_CODE,
+                "host_id": str(customer_id),
+                "hostname": customer.customer_name
+            },
+            timeout=10
+        )
+        
+        result = response.json()
+        
+        if result.get('status') != 'valid':
+            reason = result.get('reason', 'Invalid license')
+            logger.warning(f"❌ License verification failed: {reason}")
+            return jsonify({'success': False, 'error': f'License verification failed: {reason}'}), 403
+        
+        # License is valid - save it
+        old_license = customer.license_key
+        customer.license_key = license_key
+        db.session.commit()
+        
+        # Log the license update event
+        license_event = SecurityEvent(
+            customer_id=customer_id,
+            event_type='license_updated',
+            event_description=f'License key updated by {session.get("username")}',
+            severity_level='info'
+        )
+        db.session.add(license_event)
+        db.session.commit()
+        
+        logger.info(f"✅ License updated successfully for customer {customer_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'License verified and saved successfully',
+            'max_hosts': result.get('max_hosts', 0)
+        })
+        
+    except requests.exceptions.Timeout:
+        return jsonify({'success': False, 'error': 'License server timeout'}), 504
+    except requests.exceptions.RequestException as e:
+        logger.error(f"License verification error: {e}")
+        return jsonify({'success': False, 'error': 'Unable to reach license server'}), 503
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error updating license: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/devices/status')
 @login_required
@@ -1175,6 +1311,12 @@ def get_devices_status():
 @login_required
 def get_device_camera_status(device_id):
     """Get camera status from specific device"""
+
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
+    if not device:
+        return {"success": False, "error": "Device not found"}, 404
+
     data, error = device_manager.make_device_request(device_id, '/camera_status')
     if error:
         return {"success": False, "error": error}, 500
@@ -1184,6 +1326,12 @@ def get_device_camera_status(device_id):
 @login_required
 def get_device_switch_status(device_id):
     """Get switch status from specific device"""
+
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
+    if not device:
+        return {"success": False, "error": "Device not found"}, 404
+
     data, error = device_manager.make_device_request(device_id, '/switch_status')
     if error:
         return {"success": False, "error": error}, 500
@@ -1193,6 +1341,12 @@ def get_device_switch_status(device_id):
 @login_required
 def get_device_usb_status(device_id):
     """Get USB status from specific device"""
+
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
+    if not device:
+        return {"success": False, "error": "Device not found"}, 404
+
     data, error = device_manager.make_device_request(device_id, '/usb_status')
     if error:
         return {"success": False, "error": error}, 500
@@ -1202,6 +1356,12 @@ def get_device_usb_status(device_id):
 @login_required
 def test_device_connection(device_id):
     """Test connection to a specific device"""
+
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
+    if not device:
+        return {"success": False, "error": "Device not found"}, 404
+
     success, message = device_manager.test_device_connection(device_id)
     return {
         "success": success,
@@ -1214,7 +1374,8 @@ def test_device_connection(device_id):
 @login_required
 def test_all_device_connections():
     """Test authentication with all devices"""
-    devices = SecurityDevice.query.filter_by(is_active=True).all()
+    customer_id = get_customer_id()
+    devices = SecurityDevice.query.filter_by(is_active=True, customer_id=customer_id).all()
     results = {}
     
     for device in devices:
@@ -1234,7 +1395,8 @@ def test_all_device_connections():
 @login_required
 def device_live_status(device_id):
     """Get live status for a specific device (for device detail page)"""
-    device = SecurityDevice.query.get_or_404(device_id)
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first_or_404()
     
     # Get live data from device
     camera_data, camera_error = device_manager.make_device_request(device_id, '/camera_status')
@@ -1265,7 +1427,8 @@ def device_live_status(device_id):
 @login_required
 def send_registration_key_to_device(device_id):
     """Send registration key to device for auto-configuration"""
-    device = SecurityDevice.query.get_or_404(device_id)
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first_or_404()
     hub = HubConfiguration.query.filter_by(is_active=True).first()
     
     if not hub:
@@ -1299,12 +1462,14 @@ def log_device_access(device_id):
     """Log when someone accesses a device remotely"""
     try:
         data = request.get_json()
-        device = db.session.get(SecurityDevice, device_id)
+        customer_id = get_customer_id()
+        device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
         
         if device:
             # Log the access event
             event = SecurityEvent(
                 device_id=device_id,
+                customer_id=customer_id,
                 event_type='remote_access',
                 event_description=f'Remote access to {device.device_name} at {data.get("url", "unknown")}',
                 severity_level='info'
@@ -1323,7 +1488,8 @@ def log_device_access(device_id):
 @login_required
 def edit_device(device_id):
     """Show edit form for a specific device"""
-    device = db.session.get(SecurityDevice, device_id)
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
     if not device:
         flash('Device not found', 'error')
         return redirect(url_for('list_devices'))
@@ -1336,7 +1502,8 @@ def edit_device(device_id):
 @login_required
 def update_device(device_id):
     """Update device information"""
-    device = db.session.get(SecurityDevice, device_id)
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
     if not device:
         flash('Device not found', 'error')
         return redirect(url_for('list_devices'))
@@ -1414,7 +1581,8 @@ def update_device(device_id):
 def sync_device_name(device_id):
     """Manually sync device name with the actual device"""
     try:
-        device = db.session.get(SecurityDevice, device_id)
+        customer_id = get_customer_id()
+        device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
         if not device:
             return jsonify({'success': False, 'error': 'Device not found'}), 404
         
@@ -1444,6 +1612,7 @@ def sync_device_name(device_id):
                 # Log the name change
                 name_change_event = SecurityEvent(
                     device_id=device_id,
+                    customer_id=customer_id,
                     event_type='device_name_synced',
                     event_description=f'Device name synced: "{old_name}" → "{device_name}"',
                     severity_level='info'
@@ -1484,10 +1653,12 @@ def get_version():
 def interactive_map():
     print("INSIDE INTERACTIVE_MAP FUNCTION")
     """Interactive map showing all device locations"""
+    customer_id = get_customer_id()
     # Get all devices with their locations
     devices_with_locations = db.session.query(SecurityDevice, DeviceLocation)\
         .join(DeviceLocation, SecurityDevice.device_id == DeviceLocation.device_id)\
         .filter(SecurityDevice.is_active == True)\
+        .filter(SecurityDevice.customer_id == customer_id)\
         .filter(DeviceLocation.latitude.isnot(None))\
         .filter(DeviceLocation.longitude.isnot(None))\
         .all()
@@ -1524,7 +1695,8 @@ print(f"DEBUG: Map route is wrapped: {hasattr(interactive_map, '__wrapped__')}")
 @login_required
 def get_device_connection_info(device_id):
     """Get connection information for a device (tunnel vs direct IP)"""
-    device = db.session.get(SecurityDevice, device_id)
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
     if not device:
         return jsonify({'success': False, 'error': 'Device not found'}), 404
     
@@ -1550,7 +1722,8 @@ def proxy_device(device_id, path=''):
 
     logger.info(f"🔗 PROXY REQUEST: device_id={device_id}, path='{path}', query='{request.query_string.decode()}'")
 
-    device = db.session.get(SecurityDevice, device_id)
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
     if not device or not device.tunnel_port:
         return "Device not found or no tunnel", 404
    
@@ -1796,7 +1969,8 @@ def proxy_device(device_id, path=''):
 def proxy_device_name_update(device_id):
     """Handle device name updates through proxy and sync with hub database"""
     
-    device = db.session.get(SecurityDevice, device_id)
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
     if not device or not device.tunnel_port:
         return jsonify({'success': False, 'error': 'Device not found or no tunnel'}), 404
     
@@ -1840,6 +2014,7 @@ def proxy_device_name_update(device_id):
             # Log the name change event
             name_change_event = SecurityEvent(
                 device_id=device_id,
+                customer_id=customer_id,
                 event_type='device_name_changed',
                 event_description=f'Device name changed from "{old_name}" to "{new_device_name}" via proxy',
                 severity_level='info'
@@ -1911,7 +2086,8 @@ def redirect_delete_to_proxy(filename):
             device_id = match.group(1)
             
             # Forward the DELETE request to the device through proxy
-            device = db.session.get(SecurityDevice, device_id)
+            customer_id = get_customer_id()
+            device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
             if not device:
                 return jsonify({'error': 'Device not found'}), 404
             
@@ -1962,7 +2138,8 @@ def redirect_logs_to_proxy():
 @login_required
 def ping_device_api(device_id):
     """Test device connectivity via tunnel or direct IP"""
-    device = db.session.get(SecurityDevice, device_id)
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
     if not device:
         return jsonify({'success': False, 'error': 'Device not found'}), 404
     
@@ -2114,12 +2291,61 @@ def ping_device_api(device_id):
 @login_required
 def approve_device(device_id):
     """Approve a pending device and allow configuration"""
-    device = db.session.get(SecurityDevice, device_id)
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
     if not device:
         return jsonify({'success': False, 'error': 'Device not found'}), 404
     
     if device.approval_status != 'pending':
         return jsonify({'success': False, 'error': 'Device is not pending approval'}), 400
+
+    customer = db.session.query(Customer).filter_by(customer_id=customer_id).first()
+    if not customer or not customer.license_key:
+        return jsonify({'success': False, 'error': 'No license key configured for this customer'}), 403
+    
+    logger.info(f"🔑 License check starting for customer {customer_id}, license: {customer.license_key}")
+    
+    try:
+        import requests
+        LICENSE_SERVER = "https://verify.platogate.com"
+        APP_CODE = "CYBER_PHYSICAL"
+        
+        # Count currently approved devices for this customer
+        approved_count = SecurityDevice.query.filter_by(
+            customer_id=customer_id,
+            approval_status='approved'
+        ).count()
+        
+        response = requests.post(
+            f"{LICENSE_SERVER}/api/v1/license/check",
+            json={
+                "license_key": customer.license_key,
+                "app_code": APP_CODE,
+                "host_id": str(device.device_id),
+                "hostname": device.device_name
+            },
+            timeout=5
+        )
+        
+        data = response.json()
+        
+        if data.get('status') != 'valid':
+            reason = data.get('reason', 'unknown')
+            return jsonify({'success': False, 'error': f'License check failed: {reason}'}), 403
+        
+        # Check if adding this device would exceed the limit
+        max_hosts = data.get('max_hosts', 0)
+        logger.info(f"📊 License allows {max_hosts} hosts, currently have {approved_count} approved")
+        
+        if approved_count >= max_hosts:
+            return jsonify({
+                'success': False, 
+                'error': f'License limit reached. Your license allows {max_hosts} devices, you currently have {approved_count} approved.'
+            }), 403
+            
+    except Exception as e:
+        logger.error(f"License check error: {e}")
+        return jsonify({'success': False, 'error': 'Unable to verify license with server'}), 500
     
     try:
         # Get configuration data from request
@@ -2153,6 +2379,7 @@ def approve_device(device_id):
         # Log the approval event
         approval_event = SecurityEvent(
             device_id=device_id,
+            customer_id=customer_id,
             event_type='device_approved',
             event_description=f'Device {device.device_name} approved and configured',
             severity_level='info'
@@ -2183,7 +2410,8 @@ def approve_device(device_id):
 @login_required
 def reject_device(device_id):
     """Reject a pending device and remove it"""
-    device = db.session.get(SecurityDevice, device_id)
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
     if not device:
         return jsonify({'success': False, 'error': 'Device not found'}), 404
     
@@ -2191,11 +2419,21 @@ def reject_device(device_id):
         return jsonify({'success': False, 'error': 'Device is not pending approval'}), 400
     
     try:
+        if device.tunnel_port:
+            rejected = RejectedDevice(
+                tunnel_port=device.tunnel_port,
+                device_name=device.device_name,
+                rejected_by=session.get('username', 'unknown'),
+                customer_id=device.customer_id
+            )
+            db.session.add(rejected)
+
         device_name = device.device_name
         
         # Log the rejection event before deleting
         rejection_event = SecurityEvent(
             device_id=None,  # Will be orphaned after device deletion
+            customer_id=customer_id,
             event_type='device_rejected',
             event_description=f'Device {device_name} rejected and removed',
             severity_level='warning'
@@ -2226,7 +2464,8 @@ def reject_device(device_id):
 @login_required
 def debug_devices():
     """Debug route to see all devices and their statuses"""
-    devices = SecurityDevice.query.filter_by(is_active=True).all()
+    customer_id = get_customer_id()
+    devices = SecurityDevice.query.filter_by(is_active=True, customer_id=customer_id).all()
     
     debug_info = []
     for device in devices:
@@ -2247,7 +2486,8 @@ def debug_devices():
 @login_required
 def delete_device(device_id):
     """Delete a device completely"""
-    device = db.session.get(SecurityDevice, device_id)
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
     if not device:
         return jsonify({'success': False, 'error': 'Device not found'}), 404
     
@@ -2257,6 +2497,7 @@ def delete_device(device_id):
         # Log the deletion event before deleting
         deletion_event = SecurityEvent(
             device_id=None,  # Will be orphaned after device deletion
+            customer_id=customer_id,
             event_type='device_deleted',
             event_description=f'Device {device_name} deleted by admin',
             severity_level='info'
@@ -2295,6 +2536,13 @@ def login():
         user = CustomerUser.query.filter_by(username=username, is_active=True).first()
         
         if user and check_password_hash(user.password_hash, password):
+
+            # Check if customer is active
+            customer = Customer.query.get(user.customer_id)
+            if not customer or not customer.is_active:
+                flash('Account is inactive. Please contact support.', 'error')
+                return redirect(url_for('login'))
+
             # Login successful
             session['user_id'] = user.user_id
             session['customer_id'] = user.customer_id
@@ -2328,6 +2576,7 @@ def login():
             try:
                 failed_login_event = SecurityEvent(
                     event_type='failed_login',
+                    customer_id=user.customer_id if user else None,
                     event_description=f'Failed login attempt for username: {username}',
                     severity_level='warning'
                 )
@@ -2424,26 +2673,21 @@ def recordings():
 @login_required
 def download_device_videos(device_id):
     """Download videos from a specific device with customer isolation"""
-    device = db.session.get(SecurityDevice, device_id)
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
     if not device:
         return jsonify({'success': False, 'error': 'Device not found'}), 404
     
-    customer = Customer.query.first()
-    if not customer:
-        return jsonify({
-            'success': False, 
-            'error': 'No customer configured for this hub - run initialization'
-        }), 500
-    
-    customer_id = str(customer.customer_id).zfill(3)  # Format as 001, 002, etc.
+    # Format customer_id as 001, 002, etc.
+    customer_id_str = str(customer_id).zfill(3)
     
     # Create customer-specific video directory
     import os
-    video_dir = f"./videos/customer_{customer_id}/"
+    video_dir = f"./videos/customer_{customer_id_str}/"
     os.makedirs(video_dir, exist_ok=True)
     
     # Create thumbnails directory
-    thumbnail_dir = f"./thumbnails/customer_{customer_id}/"
+    thumbnail_dir = f"./thumbnails/customer_{customer_id_str}/"
     os.makedirs(thumbnail_dir, exist_ok=True)
     
     # Get list of videos from device
@@ -2561,10 +2805,10 @@ def list_recordings():
     import os
     """Get downloaded videos with customer isolation"""
    
-    customer = Customer.query.first()
-    customer_id = str(customer.customer_id).zfill(3) if customer else '001'
+    customer_id = get_customer_id()
+    customer_id_str = str(customer_id).zfill(3)
     
-    video_dir = f"./videos/customer_{customer_id}/"
+    video_dir = f"./videos/customer_{customer_id_str}/"
     videos = []
     
     if os.path.exists(video_dir):
@@ -2965,170 +3209,170 @@ def delete_user(user_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 #CP App API Routes
-@app.route('/api/mobile/devices', methods=['GET'])
-def mobile_api_devices():
-    try:
-        devices = SecurityDevice.query.all()
-        devices_data = []
-        
-        for device in devices:
+#@app.route('/api/mobile/devices', methods=['GET'])
+#def mobile_api_devices():
+#    try:
+#        devices = SecurityDevice.query.all()
+#       devices_data = []
+#        
+#        for device in devices:
             # Use the same logic as your web interface for determining connection status
-            if device.connection_status == 'connected' or device.tunnel_status == 'connected':
-                actual_status = 'connected'
-            elif device.connection_status in ['pending', 'tunnel_pending']:
-                actual_status = 'pending'
-            else:
-                actual_status = 'disconnected'
-            
-            device_info = {
-                'id': device.device_id,
-                'name': device.device_name,
-                'ip_address': device.ip_address,
-                'device_type': device.device_type,
-                'status': actual_status,  # Use the calculated status
-                'last_seen': device.last_seen.isoformat() if device.last_seen else None,
-                'is_approved': device.approval_status == 'approved'
-            }
-            devices_data.append(device_info)
-        
-        return jsonify({
-            'success': True,
-            'devices': devices_data,
-            'count': len(devices_data)
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+#            if device.connection_status == 'connected' or device.tunnel_status == 'connected':
+#               actual_status = 'connected'
+#           elif device.connection_status in ['pending', 'tunnel_pending']:
+#               actual_status = 'pending'
+#           else:
+#               actual_status = 'disconnected'
+#           
+#               'id': device.device_id,
+#               'name': device.device_name,
+#               'ip_address': device.ip_address,
+#               'device_type': device.device_type,
+#               'status': actual_status,  # Use the calculated status
+#               'last_seen': device.last_seen.isoformat() if device.last_seen else None,
+#               'is_approved': device.approval_status == 'approved'
+#           }
+#           devices_data.append(device_info)
+#       
+#       return jsonify({
+#           'success': True,
+#           'devices': devices_data,
+#           'count': len(devices_data)
+#       })
+       
+#    except Exception as e:
+#       return jsonify({
+#           'success': False,
+#           'error': str(e)
+#       }), 500
 
-@app.route('/api/mobile/cameras', methods=['GET'])
-def mobile_api_cameras():
-    try:
-        devices = SecurityDevice.query.filter_by(is_active=True).all()
-        cameras_data = []
-        
-        for device in devices:
-            # Check if device is connected
-            if device.connection_status == 'connected' or device.tunnel_status == 'connected':
-                status = 'online'
-            else:
-                status = 'offline'
+#@app.route('/api/mobile/cameras', methods=['GET'])
+#def mobile_api_cameras():
+#   try:
+#       devices = SecurityDevice.query.filter_by(is_active=True).all()
+#       cameras_data = []
+#       
+#       for device in devices:
+#           # Check if device is connected
+#           if device.connection_status == 'connected' or device.tunnel_status == 'connected':
+#               status = 'online'
+#           else:
+#               status = 'offline'
+#           
+#           # Add both Camera A and Camera B for each device
+#           cameras_data.append({
+#              'device_id': device.device_id,
+#               'device_name': device.device_name,
+#               'camera_id': 'A',
+#               'camera_name': f'{device.device_name} - Camera A',
+#               'status': status,
+#               'stream_url': f'/proxy/{device.device_id}/live/camera1' if device.tunnel_port else f'http://{device.ip_address}:{device.port}/live/camera1'
+#           })
             
-            # Add both Camera A and Camera B for each device
-            cameras_data.append({
-                'device_id': device.device_id,
-                'device_name': device.device_name,
-                'camera_id': 'A',
-                'camera_name': f'{device.device_name} - Camera A',
-                'status': status,
-                'stream_url': f'/proxy/{device.device_id}/live/camera1' if device.tunnel_port else f'http://{device.ip_address}:{device.port}/live/camera1'
-            })
-            
-            cameras_data.append({
-                'device_id': device.device_id,
-                'device_name': device.device_name,
-                'camera_id': 'B',
-                'camera_name': f'{device.device_name} - Camera B',
-                'status': status,
-                'stream_url': f'/proxy/{device.device_id}/live/camera2' if device.tunnel_port else f'http://{device.ip_address}:{device.port}/live/camera2'
-            })
+#           cameras_data.append({
+#               'device_id': device.device_id,
+#               'device_name': device.device_name,
+#               'camera_id': 'B',
+#               'camera_name': f'{device.device_name} - Camera B',
+#               'status': status,
+#               'stream_url': f'/proxy/{device.device_id}/live/camera2' if device.tunnel_port else f'http://{device.ip_address}:{device.port}/live/camera2'
+#           })
         
-        return jsonify({
-            'success': True,
-            'cameras': cameras_data,
-            'count': len(cameras_data)
-        })
+#       return jsonify({
+#           'success': True,
+#           'cameras': cameras_data,
+#           'count': len(cameras_data)
+#       })
         
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+#   except Exception as e:
+#       return jsonify({
+#           'success': False,
+#           'error': str(e)
+#       }), 500
 
 # 3) Video recordings
-@app.route('/api/mobile/recordings', methods=['GET'])
-def mobile_api_recordings():
-    import os
-    try:
+#@app.route('/api/mobile/recordings', methods=['GET'])
+#def mobile_api_recordings():
+#   import os
+#   try:
         # For mobile, we'll default to customer 001 or make it configurable later
-        customer_id = '001'  # You can make this dynamic later
-        video_dir = f"./videos/customer_{customer_id}/"
-        recordings = []
-        
-        if os.path.exists(video_dir):
-            for filename in os.listdir(video_dir):
-                if filename.endswith('.ogv'):
-                    filepath = os.path.join(video_dir, filename)
-                    stat = os.stat(filepath)
-                    
+#       customer_id = '001'  # You can make this dynamic later
+#       video_dir = f"./videos/customer_{customer_id}/"
+#       recordings = []
+       
+#        if os.path.exists(video_dir):
+#           for filename in os.listdir(video_dir):
+#               if filename.endswith('.ogv'):
+#                   filepath = os.path.join(video_dir, filename)
+#                   stat = os.stat(filepath)
+                   
                     # Extract info from filename if possible
-                    camera_id = 'A' if '_A_' in filename or 'CameraA' in filename else 'B'
+#                    camera_id = 'A' if '_A_' in filename or 'CameraA' in filename else 'B'
                     
-                    recordings.append({
-                        'id': filename,
-                        'filename': filename,
-                        'camera_id': camera_id,
-                        'size_mb': round(stat.st_size / (1024*1024), 2),
-                        'date': datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                        'download_url': f'/api/recordings/download/{filename}',
-                        'thumbnail_url': f'/thumbnails/{filename.replace(".ogv", ".jpg")}'
-                    })
+#                   recordings.append({
+#                       'id': filename,
+#                       'filename': filename,
+#                       'camera_id': camera_id,
+#                       'size_mb': round(stat.st_size / (1024*1024), 2),
+#                       'date': datetime.fromtimestamp(stat.st_mtime).isoformat(),
+#                       'download_url': f'/api/recordings/download/{filename}',
+#                       'thumbnail_url': f'/thumbnails/{filename.replace(".ogv", ".jpg")}'
+#                   })
         
         # Sort by date, newest first
-        recordings.sort(key=lambda x: x['date'], reverse=True)
+#        recordings.sort(key=lambda x: x['date'], reverse=True)
+#       
+#       return jsonify({
+#           'success': True,
+#           'recordings': recordings,
+#           'count': len(recordings)
+#       })
         
-        return jsonify({
-            'success': True,
-            'recordings': recordings,
-            'count': len(recordings)
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+#   except Exception as e:
+#       return jsonify({
+#           'success': False,
+#           'error': str(e)
+#       }), 500
 
 # 4) Security events
-@app.route('/api/mobile/events', methods=['GET'])
-def mobile_api_events():
-    try:
+#@app.route('/api/mobile/events', methods=['GET'])
+#def mobile_api_events():
+#   try:
         # Get recent events (limit to last 50 for mobile)
-        events = SecurityEvent.query.order_by(SecurityEvent.event_timestamp.desc()).limit(50).all()
-        events_data = []
+#       events = SecurityEvent.query.order_by(SecurityEvent.event_timestamp.desc()).limit(50).all()
+#        events_data = []
         
-        for event in events:
-            events_data.append({
-                'id': event.event_id,
-                'type': event.event_type,
-                'device_id': event.device_id,
-                'device_name': event.device.device_name if event.device else 'Unknown',
-                'description': event.event_description,
-                'severity': event.severity_level,
-                'timestamp': event.event_timestamp.isoformat(),
-                'is_resolved': event.is_resolved,
-                'resolution_notes': event.resolution_notes
-            })
+#       for event in events:
+#           events_data.append({
+#               'id': event.event_id,
+#               'type': event.event_type,
+#               'device_id': event.device_id,
+#               'device_name': event.device.device_name if event.device else 'Unknown',
+#               'description': event.event_description,
+#                'severity': event.severity_level,
+#               'timestamp': event.event_timestamp.isoformat(),
+#               'is_resolved': event.is_resolved,
+#               'resolution_notes': event.resolution_notes
+#           })
         
-        return jsonify({
-            'success': True,
-            'events': events_data,
-            'count': len(events_data)
-        })
+#       return jsonify({
+#           'success': True,
+#           'events': events_data,
+#           'count': len(events_data)
+#       })
         
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500   
+#   except Exception as e:
+#       return jsonify({
+#           'success': False,
+#           'error': str(e)
+#       }), 500   
 
 @app.route('/api/devices/<int:device_id>/recording_status')
 def get_device_recording_status(device_id):
     """Check if any cameras on this device are currently recording due to motion detection"""
     try:
-        device = db.session.get(SecurityDevice, device_id)
+        customer_id = get_customer_id()
+        device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
         if not device:
             return jsonify({'success': False, 'error': 'Device not found'}), 404
         
@@ -3200,7 +3444,8 @@ def get_device_recording_status(device_id):
 def restart_all_devices():
     """Restart all connected CyberPhysical devices via HTTP endpoint"""
     try:
-        devices = SecurityDevice.query.filter_by(is_active=True).all()
+        customer_id = get_customer_id()
+        devices = SecurityDevice.query.filter_by(is_active=True, customer_id=customer_id).all()
         
         if not devices:
             return jsonify({
@@ -3241,6 +3486,7 @@ def restart_all_devices():
                         # Log the restart event
                         restart_event = SecurityEvent(
                             device_id=device.device_id,
+                            customer_id=customer_id,
                             event_type='device_restart',
                             event_description=f'Device {device.device_name} restart via HTTP by {session.get("username")}',
                             severity_level='info'
@@ -3284,7 +3530,8 @@ def restart_all_devices():
 @login_required
 def get_device_motion_status(device_id):
     """Get motion detection status from device through tunnel or direct IP"""
-    device = db.session.get(SecurityDevice, device_id)
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
     if not device:
         return jsonify({'success': False, 'error': 'Device not found'}), 404
     
@@ -3308,7 +3555,8 @@ def get_device_motion_status(device_id):
 @login_required
 def toggle_device_motion_detection(device_id):
     """Toggle motion detection on device through tunnel or direct IP"""
-    device = db.session.get(SecurityDevice, device_id)
+    customer_id = get_customer_id()
+    device = SecurityDevice.query.filter_by(device_id=device_id, customer_id=customer_id).first()
     if not device:
         return jsonify({'success': False, 'error': 'Device not found'}), 404
     
@@ -3372,4 +3620,4 @@ def setup_ssl_context():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(host='127.0.0.1', port=8771, debug=False)
+    app.run(host='127.0.0.1', port=int(os.getenv('FLASK_PORT')), debug=False)

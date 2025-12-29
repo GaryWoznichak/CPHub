@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2><i class="fas fa-key"></i> License Management</h2>
+    
+    <div class="settings-section">
+        <div class="section-header">
+            <h4>Current License</h4>
+        </div>
+        <div class="section-content" style="padding: 20px;">
+            {% if customer.license_key %}
+                <div class="license-display">
+                    <label>License Key:</label>
+                    <div class="license-value">{{ customer.license_key }}</div>
+                </div>
+            {% else %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i> No license key configured
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="settings-section mt-4">
+        <div class="section-header">
+            <h4>Update License Key</h4>
+        </div>
+        <div class="section-content" style="padding: 20px;">
+            <form id="license-form">
+                <div class="form-group">
+                    <label for="license_key">Enter New License Key:</label>
+                    <input type="text" 
+                           class="form-control" 
+                           id="license_key" 
+                           name="license_key"
+                           placeholder="PV-XXXX-XXXX-XXXX"
+                           required>
+                    <small class="form-text text-muted">
+                        Format: PV-XXXX-XXXX-XXXX
+                    </small>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-check"></i> Verify and Save License
+                </button>
+                <a href="{{ url_for('settings') }}" class="btn btn-secondary">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.settings-section {
+    background: #34495e;
+    border-radius: 8px;
+    border: 1px solid #2c3e50;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.section-header {
+    background: #2c3e50;
+    padding: 15px 20px;
+    border-bottom: 1px solid #34495e;
+}
+
+.section-header h4 {
+    margin: 0;
+    color: #ecf0f1;
+    font-size: 1.1em;
+}
+
+.license-display {
+    margin: 10px 0;
+}
+
+.license-display label {
+    font-weight: 600;
+    color: #bdc3c7;
+    margin-bottom: 5px;
+}
+
+.license-value {
+    font-family: 'Courier New', monospace;
+    font-size: 1.2em;
+    color: #3498db;
+    padding: 10px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 4px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    font-weight: 600;
+    color: #ecf0f1;
+    margin-bottom: 8px;
+}
+
+.alert {
+    padding: 12px 15px;
+    border-radius: 6px;
+    margin: 10px 0;
+}
+
+.alert-warning {
+    background: #f39c12;
+    color: white;
+}
+</style>
+
+<script>
+document.getElementById('license-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const licenseKey = document.getElementById('license_key').value.trim();
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    
+    // Show loading state
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+    submitBtn.disabled = true;
+    
+    // Send to server for verification
+    fetch('/api/license/update', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            license_key: licenseKey
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✅ License verified and saved successfully!');
+            window.location.reload();
+        } else {
+            alert('❌ Error: ' + data.error);
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        }
+    })
+    .catch(error => {
+        alert('⚠️ Network error: ' + error.message);
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+    });
+});
+</script>
+{% endblock %}
